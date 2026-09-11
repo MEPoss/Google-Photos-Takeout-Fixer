@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="it">
+<html lang="it" id="html-root">
 <head>
 <meta charset="utf-8">
 <title>Google Photos Takeout Fixer</title>
@@ -382,40 +382,38 @@
 <div class="wrap">
   <div class="title-block">
     <h1>Google Photos Takeout Fixer</h1>
-    <p class="subtitle">Ripristina data, GPS e descrizione nei file esportati da Google Foto, leggendoli dai JSON di Takeout.</p>
+    <p class="subtitle" data-i18n="subtitle"></p>
   </div>
 
-  {% if not exiftool_ok %}
-  <div class="banner">
+  <div class="banner" id="exiftoolBanner" style="display:none">
     <span>⚠️</span>
-    <span>exiftool non è stato trovato nel PATH. Installalo con <code>brew install exiftool</code> prima di continuare.</span>
+    <span data-i18n-html="exiftoolMissing"></span>
   </div>
-  {% endif %}
 
   <div class="group-box">
     <div class="field">
-      <label class="field-label" for="input_dir">Cartella Takeout (input)</label>
+      <label class="field-label" for="input_dir" data-i18n="inputLabel"></label>
       <div class="path-row">
-        <input type="text" id="input_dir" placeholder="Scegli una cartella…" readonly onclick="pickFolder('input_dir')">
-        <button type="button" class="btn" onclick="pickFolder('input_dir')">Scegli…</button>
+        <input type="text" id="input_dir" readonly onclick="pickFolder('input_dir')">
+        <button type="button" class="btn" onclick="pickFolder('input_dir')" data-i18n="choose"></button>
       </div>
-      <div class="field-hint">Percorso della cartella estratta da Google Takeout.</div>
+      <div class="field-hint" data-i18n="inputHint"></div>
     </div>
 
     <div class="field">
-      <label class="field-label" for="output_dir">Cartella di output</label>
+      <label class="field-label" for="output_dir" data-i18n="outputLabel"></label>
       <div class="path-row">
-        <input type="text" id="output_dir" placeholder="Scegli una cartella…" readonly onclick="pickFolder('output_dir')">
-        <button type="button" class="btn" onclick="pickFolder('output_dir')">Scegli…</button>
+        <input type="text" id="output_dir" readonly onclick="pickFolder('output_dir')">
+        <button type="button" class="btn" onclick="pickFolder('output_dir')" data-i18n="choose"></button>
       </div>
-      <div class="field-hint">I file verranno copiati qui, organizzati per anno/mese. L'originale non viene toccato.</div>
+      <div class="field-hint" data-i18n="outputHint"></div>
     </div>
 
     <hr class="separator">
 
     <div class="field">
       <div class="stepper-row">
-        <label class="field-label" for="jobs">Worker paralleli</label>
+        <label class="field-label" for="jobs" data-i18n="jobsLabel"></label>
         <input type="number" id="jobs" value="4" min="1" max="16">
       </div>
     </div>
@@ -423,12 +421,12 @@
     <div class="field">
       <div class="checkbox-row">
         <input type="checkbox" id="dry_run">
-        <label for="dry_run">Dry run — simula senza copiare o modificare nulla</label>
+        <label for="dry_run" data-i18n="dryRun"></label>
       </div>
     </div>
 
     <div class="actions-row">
-      <button id="startBtn" class="btn-primary" onclick="startJob()">Avvia elaborazione</button>
+      <button id="startBtn" class="btn-primary" onclick="startJob()" data-i18n="start"></button>
     </div>
   </div>
 
@@ -439,10 +437,10 @@
     <div class="progress-outer"><div class="progress-inner" id="progressBar"></div></div>
 
     <div class="stats">
-      <div class="stat"><div class="num" id="statTotal">0</div><div class="lbl">Totali</div></div>
-      <div class="stat done"><div class="num" id="statProcessed">0</div><div class="lbl">Processati</div></div>
-      <div class="stat missing"><div class="num" id="statMissing">0</div><div class="lbl">Senza JSON</div></div>
-      <div class="stat errors"><div class="num" id="statErrors">0</div><div class="lbl">Errori</div></div>
+      <div class="stat"><div class="num" id="statTotal">0</div><div class="lbl" data-i18n="statTotal"></div></div>
+      <div class="stat done"><div class="num" id="statProcessed">0</div><div class="lbl" data-i18n="statProcessed"></div></div>
+      <div class="stat missing"><div class="num" id="statMissing">0</div><div class="lbl" data-i18n="statMissing"></div></div>
+      <div class="stat errors"><div class="num" id="statErrors">0</div><div class="lbl" data-i18n="statErrors"></div></div>
     </div>
 
     <div id="log"></div>
@@ -450,12 +448,94 @@
 </div>
 
 <script>
+const I18N = {
+  it: {
+    subtitle: "Ripristina data, GPS e descrizione nei file esportati da Google Foto, leggendoli dai JSON di Takeout.",
+    exiftoolMissing: 'exiftool non è stato trovato nel PATH. Installalo con <code>brew install exiftool</code> prima di continuare.',
+    inputLabel: "Cartella Takeout (input)",
+    inputHint: "Percorso della cartella estratta da Google Takeout.",
+    outputLabel: "Cartella di output",
+    outputHint: "I file verranno copiati qui, organizzati per anno/mese. L'originale non viene toccato.",
+    choose: "Scegli…",
+    choosePlaceholder: "Scegli una cartella…",
+    jobsLabel: "Worker paralleli",
+    dryRun: "Dry run — simula senza copiare o modificare nulla",
+    start: "Avvia elaborazione",
+    starting: "Elaborazione in corso…",
+    statTotal: "Totali",
+    statProcessed: "Processati",
+    statMissing: "Senza JSON",
+    statErrors: "Errori",
+    statusLabels: {pending: 'In attesa', scanning: 'Scansione in corso', running: 'Elaborazione in corso', done: 'Completato', error: 'Errore'},
+    missingDirsAlert: "Inserisci sia la cartella di input che quella di output.",
+    commErrorAlert: "Errore di comunicazione con il server: ",
+    errorAlert: "Errore: ",
+    pickFolderError: "Impossibile aprire il selettore di cartelle: ",
+    pickFolderUnavailable: "Il selettore nativo è disponibile solo nell'app desktop.",
+  },
+  en: {
+    subtitle: "Restores date, GPS, and description in files exported from Google Photos, reading them from the Takeout JSON files.",
+    exiftoolMissing: 'exiftool was not found in PATH. Install it with <code>brew install exiftool</code> before continuing.',
+    inputLabel: "Takeout folder (input)",
+    inputHint: "Path to the extracted Google Takeout folder.",
+    outputLabel: "Output folder",
+    outputHint: "Files will be copied here, organized by year/month. The original is not modified.",
+    choose: "Choose…",
+    choosePlaceholder: "Choose a folder…",
+    jobsLabel: "Parallel workers",
+    dryRun: "Dry run — simulate without copying or modifying anything",
+    start: "Start processing",
+    starting: "Processing…",
+    statTotal: "Total",
+    statProcessed: "Processed",
+    statMissing: "Missing JSON",
+    statErrors: "Errors",
+    statusLabels: {pending: 'Pending', scanning: 'Scanning', running: 'Processing', done: 'Done', error: 'Error'},
+    missingDirsAlert: "Please select both the input and output folders.",
+    commErrorAlert: "Server communication error: ",
+    errorAlert: "Error: ",
+    pickFolderError: "Could not open the folder picker: ",
+    pickFolderUnavailable: "The native picker is only available in the desktop app.",
+  },
+};
+
+function detectLang() {
+  const nav = (navigator.language || navigator.userLanguage || "en").toLowerCase();
+  return nav.startsWith("it") ? "it" : "en";
+}
+
+const LANG = detectLang();
+const T = I18N[LANG];
+
+function applyTranslations() {
+  document.getElementById("html-root").setAttribute("lang", LANG);
+  document.querySelectorAll("[data-i18n]").forEach(function (el) {
+    el.textContent = T[el.getAttribute("data-i18n")];
+  });
+  document.querySelectorAll("[data-i18n-html]").forEach(function (el) {
+    el.innerHTML = T[el.getAttribute("data-i18n-html")];
+  });
+  document.getElementById("input_dir").placeholder = T.choosePlaceholder;
+  document.getElementById("output_dir").placeholder = T.choosePlaceholder;
+}
+
+applyTranslations();
+
 let pollTimer = null;
 let pywebviewReady = false;
 
 window.addEventListener('pywebviewready', function () {
   pywebviewReady = true;
 });
+
+fetch('/api/exiftool-status')
+  .then(r => r.json())
+  .then(data => {
+    if (!data.installed) {
+      document.getElementById('exiftoolBanner').style.display = 'flex';
+    }
+  })
+  .catch(() => {});
 
 async function pickFolder(inputId) {
   if (window.pywebview && window.pywebview.api && pywebviewReady) {
@@ -465,10 +545,10 @@ async function pickFolder(inputId) {
         document.getElementById(inputId).value = path;
       }
     } catch (err) {
-      alert('Impossibile aprire il selettore di cartelle: ' + err);
+      alert(T.pickFolderError + err);
     }
   } else {
-    alert('Il selettore nativo è disponibile solo nell\'app desktop. Incolla il percorso manualmente.');
+    alert(T.pickFolderUnavailable);
   }
 }
 
@@ -479,13 +559,13 @@ function startJob() {
   const jobs = parseInt(document.getElementById('jobs').value, 10) || 4;
 
   if (!input_dir || !output_dir) {
-    alert('Inserisci sia la cartella di input che quella di output.');
+    alert(T.missingDirsAlert);
     return;
   }
 
   const btn = document.getElementById('startBtn');
   btn.disabled = true;
-  btn.textContent = 'Elaborazione in corso…';
+  btn.textContent = T.starting;
   document.getElementById('statusArea').style.display = 'block';
   document.getElementById('log').style.display = 'block';
   document.getElementById('log').textContent = '';
@@ -493,35 +573,34 @@ function startJob() {
   fetch('/api/start', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({input_dir, output_dir, dry_run, jobs})
+    body: JSON.stringify({input_dir, output_dir, dry_run, jobs, lang: LANG})
   })
   .then(r => r.json())
   .then(data => {
     if (data.error) {
       alert(data.error);
       btn.disabled = false;
-      btn.textContent = 'Avvia elaborazione';
+      btn.textContent = T.start;
       return;
     }
     pollTimer = setInterval(() => pollStatus(data.job_id), 800);
   })
   .catch(err => {
-    alert('Errore di comunicazione con il server: ' + err);
+    alert(T.commErrorAlert + err);
     btn.disabled = false;
-    btn.textContent = 'Avvia elaborazione';
+    btn.textContent = T.start;
   });
 }
 
 function pollStatus(jobId) {
-  fetch('/api/status/' + jobId)
+  fetch('/api/status/' + jobId + '?lang=' + LANG)
     .then(r => r.json())
     .then(data => {
       if (data.error) return;
 
       const badge = document.getElementById('statusBadge');
       badge.className = 'status-badge ' + data.state;
-      const labels = {pending: 'In attesa', scanning: 'Scansione in corso', running: 'Elaborazione in corso', done: 'Completato', error: 'Errore'};
-      badge.textContent = labels[data.state] || data.state;
+      badge.textContent = T.statusLabels[data.state] || data.state;
 
       document.getElementById('statTotal').textContent = data.total;
       document.getElementById('statProcessed').textContent = data.processed;
@@ -539,9 +618,9 @@ function pollStatus(jobId) {
         clearInterval(pollTimer);
         const btn = document.getElementById('startBtn');
         btn.disabled = false;
-        btn.textContent = 'Avvia elaborazione';
+        btn.textContent = T.start;
         if (data.state === 'error' && data.error_message) {
-          alert('Errore: ' + data.error_message);
+          alert(T.errorAlert + data.error_message);
         }
       }
     });

@@ -231,14 +231,41 @@ def collect_media_files(input_root: Path) -> list:
     return files
 
 
+STRINGS = {
+    "it": {
+        "input_not_found": "Cartella di input non trovata: {path}",
+        "scanning": "Scansione di {path} ...",
+        "found_files": "Trovati {n} file media da elaborare.",
+        "no_json": "[NO JSON] {name}",
+        "exiftool_error": "[ERRORE exiftool] {name}: {err}",
+        "exception": "[ECCEZIONE] {name}: {exc}",
+        "done": "Elaborazione completata.",
+        "error_log": "Log errori: {path}",
+        "fatal_error": "[ERRORE FATALE] {exc}",
+    },
+    "en": {
+        "input_not_found": "Input folder not found: {path}",
+        "scanning": "Scanning {path} ...",
+        "found_files": "Found {n} media files to process.",
+        "no_json": "[NO JSON] {name}",
+        "exiftool_error": "[exiftool ERROR] {name}: {err}",
+        "exception": "[EXCEPTION] {name}: {exc}",
+        "done": "Processing complete.",
+        "error_log": "Error log: {path}",
+        "fatal_error": "[FATAL ERROR] {exc}",
+    },
+}
+
+
 class Job:
     """Rappresenta un'esecuzione del fixer, eseguita in un thread separato."""
 
-    def __init__(self, input_dir: str, output_dir: str, dry_run: bool = False, jobs: int = 4):
+    def __init__(self, input_dir: str, output_dir: str, dry_run: bool = False, jobs: int = 4, lang: str = "it"):
         self.input_root = Path(input_dir).expanduser().resolve()
         self.output_root = Path(output_dir).expanduser().resolve()
         self.dry_run = dry_run
         self.jobs = max(1, jobs)
+        self.strings = STRINGS.get(lang, STRINGS["it"])
 
         self.state = "pending"  # pending -> scanning -> running -> done/error
         self.total = 0
@@ -249,6 +276,9 @@ class Job:
         self.error_message = None
         self._lock = threading.Lock()
         self._thread = None
+
+    def t(self, key: str, **kwargs) -> str:
+        return self.strings[key].format(**kwargs)
 
     def log(self, msg: str):
         with self._lock:
@@ -275,17 +305,17 @@ class Job:
     def _run(self):
         try:
             if not self.input_root.is_dir():
-                raise RuntimeError(f"Cartella di input non trovata: {self.input_root}")
+                raise RuntimeError(self.t("input_not_found", path=self.input_root))
 
             self.output_root.mkdir(parents=True, exist_ok=True)
             error_log_path = self.output_root / "errors.log"
             error_log_path.write_text("", encoding="utf-8")
 
             self.state = "scanning"
-            self.log(f"Scansione di {self.input_root} ...")
+            self.log(self.t("scanning", path=self.input_root))
             media_files = collect_media_files(self.input_root)
             self.total = len(media_files)
-            self.log(f"Trovati {self.total} file media da elaborare.")
+            self.log(self.t("found_files", n=self.total))
 
             self.state = "running"
             dir_json_cache = {}
@@ -314,7 +344,7 @@ class Job:
                         with error_log_lock:
                             with open(error_log_path, "a", encoding="utf-8") as ef:
                                 ef.write(f"NO_JSON\t{media_path}\n")
-                        self.log(f"[NO JSON] {media_path.name}")
+                        self.log(self.t("no_json", name=media_path.name))
 
                     dest_dir_time = meta["timestamp"]
                     if dest_dir_time is None:
@@ -336,7 +366,7 @@ class Job:
                                 with error_log_lock:
                                     with open(error_log_path, "a", encoding="utf-8") as ef:
                                         ef.write(f"EXIFTOOL_ERROR\t{media_path}\t{err}\n")
-                                self.log(f"[ERRORE exiftool] {media_path.name}: {err}")
+                                self.log(self.t("exiftool_error", name=media_path.name, err=err))
 
                             if meta["timestamp"] is not None:
                                 ts = meta["timestamp"]
@@ -351,18 +381,18 @@ class Job:
                     with error_log_lock:
                         with open(error_log_path, "a", encoding="utf-8") as ef:
                             ef.write(f"EXCEPTION\t{media_path}\t{exc}\n")
-                    self.log(f"[ECCEZIONE] {media_path.name}: {exc}")
+                    self.log(self.t("exception", name=media_path.name, exc=exc))
 
             with ThreadPoolExecutor(max_workers=self.jobs) as executor:
                 futures = [executor.submit(process_one, mf) for mf in media_files]
                 for _ in as_completed(futures):
                     pass
 
-            self.log("Elaborazione completata.")
-            self.log(f"Log errori: {error_log_path}")
+            self.log(self.t("done"))
+            self.log(self.t("error_log", path=error_log_path))
             self.state = "done"
 
         except Exception as exc:
             self.error_message = str(exc)
             self.state = "error"
-            self.log(f"[ERRORE FATALE] {exc}")
+            self.log(self.t("fatal_error", exc=exc))
