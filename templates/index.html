@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Google Takeout Fixer</title>
+<style>
+  :root {
+    --bg: #f7f7f8;
+    --card: #ffffff;
+    --border: #e2e2e6;
+    --text: #1c1c1f;
+    --muted: #6b6b74;
+    --accent: #2f6fed;
+    --accent-dark: #1f4fc0;
+    --ok: #1a9f5c;
+    --warn: #c9860a;
+    --err: #d94141;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  .wrap {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 40px 20px 80px;
+  }
+  h1 {
+    font-size: 22px;
+    margin-bottom: 4px;
+  }
+  p.subtitle {
+    color: var(--muted);
+    margin-top: 0;
+    margin-bottom: 28px;
+    font-size: 14px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+  .banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    margin-bottom: 20px;
+  }
+  .banner.ok { background: #e9f9f0; color: var(--ok); }
+  .banner.err { background: #fdeaea; color: var(--err); }
+  label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    margin-top: 16px;
+  }
+  label:first-of-type { margin-top: 0; }
+  input[type="text"], input[type="number"] {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 14px;
+    background: #fff;
+    color: var(--text);
+  }
+  input[type="text"]:focus, input[type="number"]:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  .hint {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  .row {
+    display: flex;
+    gap: 16px;
+  }
+  .row > div { flex: 1; }
+  .path-row {
+    display: flex;
+    gap: 8px;
+  }
+  .path-row input { flex: 1; }
+  .browse-btn {
+    margin-top: 0;
+    width: auto;
+    white-space: nowrap;
+    padding: 10px 16px;
+    background: #eceef2;
+    color: var(--text);
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .browse-btn:hover { background: #dfe1e6; }
+  .checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 18px;
+  }
+  .checkbox-row input { width: auto; }
+  .checkbox-row label { margin: 0; font-weight: 500; }
+  button {
+    margin-top: 22px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 12px 22px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    width: 100%;
+  }
+  button:hover { background: var(--accent-dark); }
+  button:disabled { background: #b9c6e6; cursor: not-allowed; }
+
+  .progress-outer {
+    background: #eceef2;
+    border-radius: 999px;
+    height: 10px;
+    overflow: hidden;
+    margin-top: 10px;
+  }
+  .progress-inner {
+    background: var(--accent);
+    height: 100%;
+    width: 0%;
+    transition: width 0.3s ease;
+  }
+  .stats {
+    display: flex;
+    gap: 20px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+  }
+  .stat {
+    flex: 1;
+    min-width: 110px;
+    background: #f4f5f7;
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+  .stat .num { font-size: 20px; font-weight: 700; }
+  .stat .lbl { font-size: 12px; color: var(--muted); }
+  .stat.errors .num { color: var(--err); }
+  .stat.missing .num { color: var(--warn); }
+  .stat.done .num { color: var(--ok); }
+
+  #log {
+    background: #14151a;
+    color: #d6d8dd;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 12px;
+    padding: 14px;
+    border-radius: 8px;
+    height: 240px;
+    overflow-y: auto;
+    margin-top: 16px;
+    white-space: pre-wrap;
+    display: none;
+  }
+  .status-badge {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 999px;
+    margin-top: 14px;
+  }
+  .status-badge.running { background: #e7edff; color: var(--accent); }
+  .status-badge.done { background: #e9f9f0; color: var(--ok); }
+  .status-badge.error { background: #fdeaea; color: var(--err); }
+  .status-badge.scanning { background: #fff6e5; color: var(--warn); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Google Takeout Fixer</h1>
+  <p class="subtitle">Ripristina data, GPS e descrizione nei file esportati da Google Foto, leggendoli dai JSON di Takeout.</p>
+
+  {% if not exiftool_ok %}
+  <div class="banner err">
+    ⚠️ exiftool non è stato trovato nel PATH. Installalo con <code>brew install exiftool</code> (macOS) prima di continuare.
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <label for="input_dir">Cartella Takeout (input)</label>
+    <div class="path-row">
+      <input type="text" id="input_dir" placeholder="/Users/tuonome/Downloads/Takeout">
+      <button type="button" class="browse-btn" onclick="pickFolder('input_dir')">Sfoglia…</button>
+    </div>
+    <div class="hint">Percorso assoluto della cartella estratta da Google Takeout.</div>
+
+    <label for="output_dir">Cartella di output</label>
+    <div class="path-row">
+      <input type="text" id="output_dir" placeholder="/Users/tuonome/Desktop/Foto_sistemate">
+      <button type="button" class="browse-btn" onclick="pickFolder('output_dir')">Sfoglia…</button>
+    </div>
+    <div class="hint">I file verranno copiati qui, organizzati per anno/mese. L'originale non viene toccato.</div>
+
+    <div class="row">
+      <div>
+        <label for="jobs">Worker paralleli</label>
+        <input type="number" id="jobs" value="4" min="1" max="16">
+      </div>
+    </div>
+
+    <div class="checkbox-row">
+      <input type="checkbox" id="dry_run">
+      <label for="dry_run">Dry run (simula senza copiare o modificare nulla)</label>
+    </div>
+
+    <button id="startBtn" onclick="startJob()">Avvia elaborazione</button>
+
+    <div id="statusArea" style="display:none">
+      <span id="statusBadge" class="status-badge"></span>
+      <div class="progress-outer"><div class="progress-inner" id="progressBar"></div></div>
+
+      <div class="stats">
+        <div class="stat"><div class="num" id="statTotal">0</div><div class="lbl">Totali</div></div>
+        <div class="stat done"><div class="num" id="statProcessed">0</div><div class="lbl">Processati</div></div>
+        <div class="stat missing"><div class="num" id="statMissing">0</div><div class="lbl">Senza JSON</div></div>
+        <div class="stat errors"><div class="num" id="statErrors">0</div><div class="lbl">Errori</div></div>
+      </div>
+
+      <div id="log"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let pollTimer = null;
+let pywebviewReady = false;
+
+window.addEventListener('pywebviewready', function () {
+  pywebviewReady = true;
+});
+
+async function pickFolder(inputId) {
+  if (window.pywebview && window.pywebview.api && pywebviewReady) {
+    try {
+      const path = await window.pywebview.api.pick_folder();
+      if (path) {
+        document.getElementById(inputId).value = path;
+      }
+    } catch (err) {
+      alert('Impossibile aprire il selettore di cartelle: ' + err);
+    }
+  } else {
+    alert('Il selettore nativo è disponibile solo nell\'app desktop. Incolla il percorso manualmente.');
+  }
+}
+
+function startJob() {
+  const input_dir = document.getElementById('input_dir').value.trim();
+  const output_dir = document.getElementById('output_dir').value.trim();
+  const dry_run = document.getElementById('dry_run').checked;
+  const jobs = parseInt(document.getElementById('jobs').value, 10) || 4;
+
+  if (!input_dir || !output_dir) {
+    alert('Inserisci sia la cartella di input che quella di output.');
+    return;
+  }
+
+  const btn = document.getElementById('startBtn');
+  btn.disabled = true;
+  btn.textContent = 'Elaborazione in corso...';
+  document.getElementById('statusArea').style.display = 'block';
+  document.getElementById('log').style.display = 'block';
+  document.getElementById('log').textContent = '';
+
+  fetch('/api/start', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({input_dir, output_dir, dry_run, jobs})
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.error) {
+      alert(data.error);
+      btn.disabled = false;
+      btn.textContent = 'Avvia elaborazione';
+      return;
+    }
+    pollTimer = setInterval(() => pollStatus(data.job_id), 800);
+  })
+  .catch(err => {
+    alert('Errore di comunicazione con il server: ' + err);
+    btn.disabled = false;
+    btn.textContent = 'Avvia elaborazione';
+  });
+}
+
+function pollStatus(jobId) {
+  fetch('/api/status/' + jobId)
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) return;
+
+      const badge = document.getElementById('statusBadge');
+      badge.className = 'status-badge ' + data.state;
+      const labels = {pending: 'In attesa', scanning: 'Scansione in corso', running: 'Elaborazione in corso', done: 'Completato', error: 'Errore'};
+      badge.textContent = labels[data.state] || data.state;
+
+      document.getElementById('statTotal').textContent = data.total;
+      document.getElementById('statProcessed').textContent = data.processed;
+      document.getElementById('statMissing').textContent = data.missing_metadata;
+      document.getElementById('statErrors').textContent = data.errors;
+
+      const pct = data.total > 0 ? Math.round((data.processed / data.total) * 100) : 0;
+      document.getElementById('progressBar').style.width = pct + '%';
+
+      const logEl = document.getElementById('log');
+      logEl.textContent = data.log_tail.join('\n');
+      logEl.scrollTop = logEl.scrollHeight;
+
+      if (data.state === 'done' || data.state === 'error') {
+        clearInterval(pollTimer);
+        const btn = document.getElementById('startBtn');
+        btn.disabled = false;
+        btn.textContent = 'Avvia elaborazione';
+        if (data.state === 'error' && data.error_message) {
+          alert('Errore: ' + data.error_message);
+        }
+      }
+    });
+}
+</script>
+</body>
+</html>
