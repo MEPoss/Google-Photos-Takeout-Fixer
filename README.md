@@ -13,7 +13,7 @@ App desktop nativa per macOS, con finestra propria: nessun terminale e nessun
 browser richiesti per l'uso quotidiano.
 
 <p align="center">
-  <img src="docs/screenshot.png" width="700" alt="Screenshot dell'interfaccia">
+  <img width="749" height="477" alt="image" src="https://github.com/user-attachments/assets/0bd71405-7050-4edf-9a4b-0341d7733efe" />
 </p>
 
 ## Cosa fa
