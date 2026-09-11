@@ -7,17 +7,20 @@
   :root {
     color-scheme: light dark;
 
-    /* Superfici, in stile macOS (windowBackground / controlBackground) */
+    /* Superfici: valori esatti di NSColor.windowBackgroundColor /
+       controlBackgroundColor / separatorColor letti da AppKit, così la
+       titlebar nativa (che pywebview colora con lo stesso windowBackgroundColor
+       di sistema) si fonde senza cuciture con il contenuto della pagina. */
     --window-bg: #ececec;
     --group-bg: #ffffff;
     --control-bg: #ffffff;
     --separator: rgba(0, 0, 0, 0.1);
     --hairline: rgba(0, 0, 0, 0.08);
 
-    /* Testo, in stile label / secondaryLabel / tertiaryLabel */
+    /* Testo: valori esatti di labelColor / secondaryLabelColor / tertiaryLabelColor */
     --label: rgba(0, 0, 0, 0.85);
     --label-secondary: rgba(0, 0, 0, 0.5);
-    --label-tertiary: rgba(0, 0, 0, 0.32);
+    --label-tertiary: rgba(0, 0, 0, 0.26);
 
     /* Colori di sistema */
     --accent: #007aff;
@@ -33,15 +36,15 @@
 
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --window-bg: #262626;
-      --group-bg: #2f2f2f;
-      --control-bg: #3a3a3c;
-      --separator: rgba(255, 255, 255, 0.12);
-      --hairline: rgba(255, 255, 255, 0.09);
+      --window-bg: #323232;
+      --group-bg: #1e1e1e;
+      --control-bg: #2c2c2e;
+      --separator: rgba(255, 255, 255, 0.1);
+      --hairline: rgba(255, 255, 255, 0.08);
 
-      --label: rgba(255, 255, 255, 0.92);
+      --label: rgba(255, 255, 255, 0.85);
       --label-secondary: rgba(255, 255, 255, 0.55);
-      --label-tertiary: rgba(255, 255, 255, 0.35);
+      --label-tertiary: rgba(255, 255, 255, 0.25);
 
       --accent: #0a84ff;
       --accent-pressed: #0060c4;
@@ -166,8 +169,15 @@
     border-color: var(--accent);
     box-shadow: 0 0 0 3.5px color-mix(in srgb, var(--accent) 30%, transparent);
   }
+  /* Il percorso si sceglie solo dal Finder: il campo è di sola lettura e
+     cliccabile, niente cursore lampeggiante che inviti a digitare a mano. */
+  input[type="text"][readonly] {
+    cursor: pointer;
+    caret-color: transparent;
+    text-overflow: ellipsis;
+  }
 
-  /* Bottone "Sfoglia": bordered, stessa altezza del campo */
+  /* Bottone "Scegli…": bordered, stessa altezza del campo */
   .btn {
     -webkit-appearance: none;
     appearance: none;
@@ -386,8 +396,8 @@
     <div class="field">
       <label class="field-label" for="input_dir">Cartella Takeout (input)</label>
       <div class="path-row">
-        <input type="text" id="input_dir" placeholder="/Users/tuonome/Downloads/Takeout">
-        <button type="button" class="btn" onclick="pickFolder('input_dir')">Sfoglia…</button>
+        <input type="text" id="input_dir" placeholder="Scegli una cartella…" readonly onclick="pickFolder('input_dir')">
+        <button type="button" class="btn" onclick="pickFolder('input_dir')">Scegli…</button>
       </div>
       <div class="field-hint">Percorso della cartella estratta da Google Takeout.</div>
     </div>
@@ -395,8 +405,8 @@
     <div class="field">
       <label class="field-label" for="output_dir">Cartella di output</label>
       <div class="path-row">
-        <input type="text" id="output_dir" placeholder="/Users/tuonome/Desktop/Foto_sistemate">
-        <button type="button" class="btn" onclick="pickFolder('output_dir')">Sfoglia…</button>
+        <input type="text" id="output_dir" placeholder="Scegli una cartella…" readonly onclick="pickFolder('output_dir')">
+        <button type="button" class="btn" onclick="pickFolder('output_dir')">Scegli…</button>
       </div>
       <div class="field-hint">I file verranno copiati qui, organizzati per anno/mese. L'originale non viene toccato.</div>
     </div>

@@ -26,10 +26,30 @@ class Api:
         return None
 
 
+def _hide_title_text(window):
+    """Nasconde il testo del titolo nella titlebar (restano solo i semafori),
+    come nella maggior parte delle utility app native di macOS.
+
+    Va eseguita sul main thread: l'evento `shown` di pywebview scatta invece
+    su un thread secondario, e AppKit rifiuta di modificare la geometria
+    della finestra fuori dal main thread.
+    """
+    native = getattr(window, "native", None)
+    if native is None:
+        return
+    try:
+        import AppKit
+        from PyObjCTools import AppHelper
+
+        AppHelper.callAfter(lambda: native.setTitleVisibility_(AppKit.NSWindowTitleHidden))
+    except Exception:
+        pass
+
+
 def main():
     threading.Thread(target=run_flask, daemon=True).start()
     api = Api()
-    webview.create_window(
+    window = webview.create_window(
         "Google Photos Takeout Fixer",
         "http://127.0.0.1:5050",
         width=820,
@@ -37,6 +57,7 @@ def main():
         resizable=True,
         js_api=api,
     )
+    window.events.shown += lambda: _hide_title_text(window)
     webview.start()
 
 

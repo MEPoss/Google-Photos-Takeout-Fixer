@@ -30,7 +30,7 @@ DATA_FILES = collect_tree("templates") + collect_tree("vendor")
 OPTIONS = {
     "argv_emulation": False,
     "packages": ["flask", "jinja2", "werkzeug", "markupsafe", "click", "itsdangerous", "blinker"],
-    "includes": ["webview", "objc", "Foundation", "AppKit", "WebKit", "Quartz", "core", "app"],
+    "includes": ["webview", "objc", "Foundation", "AppKit", "WebKit", "Quartz", "PyObjCTools", "core", "app"],
     "iconfile": "AppIcon.icns",
     "plist": {
         "CFBundleName": "Google Photos Takeout Fixer",
