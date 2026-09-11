@@ -40,10 +40,24 @@ browser richiesti per l'uso quotidiano.
 ## Uso
 
 Scarica il `.dmg` dalla sezione [Releases](../../releases), trascina l'app in
-Applications, aprila. Al primo avvio su un Mac diverso da quello di build,
-macOS potrebbe avvisare che l'app è di uno sviluppatore non identificato (non
-è firmata/notarizzata): click destro sull'icona, poi **Apri**, poi conferma,
-una volta sola.
+Applications, aprila. Al primo avvio macOS potrebbe avvisare che l'app è di
+uno sviluppatore non identificato (non è firmata né notarizzata: richiederebbe
+un account Apple Developer a pagamento): click destro sull'icona, poi **Apri**,
+poi conferma, una volta sola.
+
+Se anche così non si apre ("è danneggiata" o l'app non parte), rimuovi
+l'attributo di quarantena da terminale e riprova:
+
+```bash
+xattr -cr "/Applications/Google Photos Takeout Fixer.app"
+open "/Applications/Google Photos Takeout Fixer.app"
+```
+
+Per vedere l'eventuale errore in chiaro, avvia il binario direttamente:
+
+```bash
+"/Applications/Google Photos Takeout Fixer.app/Contents/MacOS/Google Photos Takeout Fixer"
+```
 
 ## Build da sorgente
 
