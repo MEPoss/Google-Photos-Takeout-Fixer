@@ -83,7 +83,10 @@ def find_json_for_media(media_path: Path, dir_json_cache: dict):
             return p
 
     if dir_path not in dir_json_cache:
-        dir_json_cache[dir_path] = [p for p in dir_path.iterdir() if p.suffix.lower() == ".json"]
+        dir_json_cache[dir_path] = [
+            p for p in dir_path.iterdir()
+            if p.suffix.lower() == ".json" and not p.name.startswith("._")
+        ]
 
     dir_jsons = dir_json_cache[dir_path]
     media_key = media_name.lower()
@@ -226,6 +229,13 @@ def unique_path(path: Path) -> Path:
 def collect_media_files(input_root: Path) -> list:
     files = []
     for p in input_root.rglob("*"):
+        # File "._Nome.jpg": sidecar AppleDouble che macOS crea per salvare
+        # metadati Finder su filesystem che non li supportano (es. dischi
+        # esterni exFAT/NTFS). Non sono foto reali: vanno ignorati, altrimenti
+        # vengono scambiati per media e abbinati ad altrettanti JSON fantasma
+        # (anch'essi file binari "._...json", non testo) causando eccezioni.
+        if p.name.startswith("._"):
+            continue
         if p.is_file() and p.suffix.lower() in MEDIA_EXTENSIONS:
             files.append(p)
     return files
