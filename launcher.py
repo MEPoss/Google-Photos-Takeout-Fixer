@@ -1,8 +1,10 @@
 """
 Avvia il backend Flask in background e apre l'interfaccia in una finestra
-nativa macOS (senza bisogno del browser), tramite pywebview.
+nativa (senza bisogno del browser), tramite pywebview. Funziona sia su
+macOS (backend Cocoa) sia su Linux (backend GTK/WebKit2).
 """
 
+import sys
 import threading
 
 import webview
@@ -28,12 +30,15 @@ class Api:
 
 def _hide_title_text(window):
     """Nasconde il testo del titolo nella titlebar (restano solo i semafori),
-    come nella maggior parte delle utility app native di macOS.
+    come nella maggior parte delle utility app native di macOS. Solo macOS:
+    su Linux la titlebar è gestita dal window manager, non da questo codice.
 
     Va eseguita sul main thread: l'evento `shown` di pywebview scatta invece
     su un thread secondario, e AppKit rifiuta di modificare la geometria
     della finestra fuori dal main thread.
     """
+    if sys.platform != "darwin":
+        return
     native = getattr(window, "native", None)
     if native is None:
         return

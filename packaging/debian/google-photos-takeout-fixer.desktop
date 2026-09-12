@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Google Photos Takeout Fixer
+Comment=Restore date, GPS and description in Google Takeout exports
+Exec=/usr/bin/google-photos-takeout-fixer
+Icon=google-photos-takeout-fixer
+Terminal=false
+Categories=Graphics;Photography;Utility;

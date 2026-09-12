@@ -31,13 +31,14 @@ browser richiesti per l'uso quotidiano.
 
 ## Requisiti
 
-- macOS 11+
+- macOS 11+ **oppure** Debian 12 (Bookworm) e derivate
 - Se buildi da sorgente: Python 3.10+
 - `exiftool`, incluso nella cartella `vendor/exiftool` (versione standalone
-  Perl, nessuna dipendenza da Homebrew); se assente, viene usato quello di
-  sistema come fallback (`brew install exiftool`)
+  Perl, nessuna dipendenza da Homebrew/apt); se assente, viene usato quello
+  di sistema come fallback (`brew install exiftool` / `apt install
+  libimage-exiftool-perl`)
 
-## Uso
+## Uso (macOS)
 
 Scarica il `.dmg` dalla sezione [Releases](../../releases), trascina l'app in
 Applications, aprila. Al primo avvio macOS potrebbe avvisare che l'app è di
@@ -59,7 +60,23 @@ Per vedere l'eventuale errore in chiaro, avvia il binario direttamente:
 "/Applications/Google Photos Takeout Fixer.app/Contents/MacOS/Google Photos Takeout Fixer"
 ```
 
-## Build da sorgente
+## Uso (Debian / derivate)
+
+Scarica il pacchetto `.deb` dalla sezione [Releases](../../releases) e
+installalo:
+
+```bash
+sudo apt install ./google-photos-takeout-fixer_<versione>_all.deb
+```
+
+`apt` risolve da solo le dipendenze (Python 3, GTK, WebKit2GTK, Perl). L'app
+compare nel menu applicazioni, oppure si avvia da terminale con:
+
+```bash
+google-photos-takeout-fixer
+```
+
+## Build da sorgente (macOS)
 
 ```bash
 python3 -m venv .venv
@@ -72,14 +89,28 @@ L'app congelata finisce in `dist/Google Photos Takeout Fixer.app`, completa di
 Python, dipendenze ed `exiftool` bundlati: non richiede nulla installato sul
 Mac di destinazione.
 
+## Build del pacchetto Debian
+
+Il `.deb` viene costruito e testato automaticamente da
+[`.github/workflows/build-deb.yml`](.github/workflows/build-deb.yml) dentro un
+container `debian:bookworm` (crea il pacchetto, lo installa con `apt`, avvia
+l'app sotto un display virtuale Xvfb e verifica che risponda davvero prima di
+allegarlo alla release). Per riprodurlo in locale su una macchina Linux:
+
+```bash
+sudo packaging/debian/build.sh 1.0.0
+```
+
 ## Struttura del progetto
 
 - [`core.py`](core.py): logica di scansione, matching JSON, scrittura exif
 - [`app.py`](app.py): server locale interno (usato solo dall'app, non pensato
   per essere aperto direttamente in un browser)
-- [`launcher.py`](launcher.py): avvio come app nativa macOS via `pywebview`
-- [`templates/index.html`](templates/index.html): interfaccia
-- [`setup.py`](setup.py): build `.app` con `py2app`
+- [`launcher.py`](launcher.py): avvio come app nativa via `pywebview`
+  (Cocoa su macOS, GTK/WebKit2 su Linux)
+- [`templates/index.html`](templates/index.html): interfaccia (IT/EN)
+- [`setup.py`](setup.py): build `.app` macOS con `py2app`
+- [`packaging/debian`](packaging/debian): script e file per il pacchetto `.deb`
 - [`vendor/exiftool`](vendor/exiftool): distribuzione standalone di ExifTool
 
 ## Licenza

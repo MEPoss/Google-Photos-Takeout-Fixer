@@ -1,0 +1,47 @@
+name: Build & test Debian package
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-deb:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine version
+        id: version
+        run: |
+          RAW_REF="${GITHUB_REF#refs/tags/}"
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            VERSION="${RAW_REF#v}"
+          else
+            VERSION="0.0.$(date +%s)"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build and test .deb inside debian:bookworm
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/workspace" \
+            debian:bookworm \
+            /workspace/packaging/debian/build.sh "${{ steps.version.outputs.version }}"
+
+      - name: Upload .deb as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: google-photos-takeout-fixer-deb
+          path: "*.deb"
+
+      - name: Attach .deb to GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${GITHUB_REF#refs/tags/}" *.deb --clobber

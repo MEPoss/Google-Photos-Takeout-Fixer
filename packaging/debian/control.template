@@ -1,0 +1,14 @@
+Package: google-photos-takeout-fixer
+Version: __VERSION__
+Section: graphics
+Priority: optional
+Architecture: all
+Depends: python3 (>= 3.10), python3-venv, python3-gi, gir1.2-gtk-3.0, gir1.2-webkit2-4.1 | gir1.2-webkit2-4.0, perl
+Maintainer: Ugo Possenti <ugopossenti@me.com>
+Homepage: https://github.com/MEPoss/Google-Photos-Takeout-Fixer
+Description: Restore metadata in Google Photos Takeout exports
+ Reads the JSON metadata files exported alongside photos and videos by
+ Google Takeout and writes date, GPS coordinates and description back
+ into the actual media files (EXIF for photos, container metadata for
+ videos) using a bundled copy of exiftool. Ships with a small native
+ desktop UI (GTK/WebKit2), available in Italian and English.
