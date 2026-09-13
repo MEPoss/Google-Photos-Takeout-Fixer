@@ -4,6 +4,14 @@
 
 # Google Photos Takeout Fixer
 
+> ⚠️ **Se hai usato una versione precedente alla v1.1.4**: è stato corretto un
+> bug che, in rari casi, poteva scrivere data/GPS/descrizione presi da una
+> foto sbagliata (nomi file molto simili tra loro nella stessa cartella,
+> es. stessa data, stesso prefisso "PXL_", numerazione sequenziale). Aggiorna
+> all'ultima versione. Se hai già processato foto con una versione precedente,
+> controlla i file con nomi simili nella stessa cartella prima di fidarti dei
+> metadati scritti — vedi i dettagli nella [release v1.1.4](../../releases/tag/v1.1.4).
+
 Ripristina i metadati (data, GPS, descrizione) nei file esportati con **Google
 Takeout** da Google Foto. Google Takeout esporta ogni foto/video insieme a un
 file JSON separato con i metadati originali, ma i file media spesso non li
