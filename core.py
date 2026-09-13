@@ -186,22 +186,71 @@ def build_exiftool_args(meta: dict) -> list:
     return args
 
 
+def _run_exiftool_cmd(exiftool_bin: str, target: Path, exif_args: list):
+    cmd = [
+        exiftool_bin, "-m", "-overwrite_original",
+        "-api", "QuickTimeUTC=1",
+        "-api", "LargeFileSupport=1",
+        *exif_args, str(target),
+    ]
+    return subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+
+
 def run_exiftool(target: Path, exif_args: list):
+    """Scrive i metadati con exiftool, con due tentativi di recupero mirati
+    per i pattern di errore più comuni su export Google Takeout reali:
+
+    1. Estensione non corrispondente al contenuto reale (es. un file
+       ".HEIC" che in realtà è un JPEG): si rinomina temporaneamente il
+       file con l'estensione corretta, si scrive, poi si ripristina il
+       nome originale — l'utente vede comunque il nome esportato da Google.
+    2. Struttura EXIF interna corrotta/troncata (es. "Can't read SubIFD
+       data", "Error reading OtherImageStart data") che impedisce a
+       exiftool di riscrivere il file preservando i tag esistenti: si
+       elimina tutto l'EXIF esistente (già parzialmente illeggibile) e si
+       riscrivono solo i tag che questo tool imposta. Distruttivo verso
+       eventuali altri tag della fotocamera, quindi usato solo come
+       ultima risorsa e sempre segnalato nel messaggio restituito.
+
+    -m (-ignoreMinorErrors) è sempre passato: risolve da solo gli errori
+    che exiftool stesso classifica come "[minor]" (es. puntatori IFD
+    duplicati), senza alcun effetto collaterale.
+    """
     if not exif_args:
         return True, ""
     exiftool_bin = resolve_exiftool()
     if exiftool_bin is None:
         return False, "exiftool non trovato"
-    cmd = [
-        exiftool_bin, "-overwrite_original",
-        "-api", "QuickTimeUTC=1",
-        "-api", "LargeFileSupport=1",
-        *exif_args, str(target),
-    ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    if proc.returncode != 0:
-        return False, proc.stderr.strip()
-    return True, ""
+
+    proc = _run_exiftool_cmd(exiftool_bin, target, exif_args)
+    if proc.returncode == 0:
+        return True, ""
+    stderr = proc.stderr.strip()
+
+    m = re.search(r"looks more like a (\w+)", stderr, re.IGNORECASE)
+    if m:
+        real_ext = "." + m.group(1).lower()
+        temp_path = target.with_name(target.name + "__extfix" + real_ext)
+        try:
+            target.rename(temp_path)
+            retry = _run_exiftool_cmd(exiftool_bin, temp_path, exif_args)
+        finally:
+            if temp_path.exists():
+                temp_path.rename(target)
+        if retry.returncode == 0:
+            return True, f"[recuperato: estensione non corrispondeva al contenuto reale] {stderr}"
+        stderr = retry.stderr.strip()
+
+    strip_proc = subprocess.run(
+        [exiftool_bin, "-m", "-all=", "-overwrite_original", str(target)],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    if strip_proc.returncode == 0:
+        retry2 = _run_exiftool_cmd(exiftool_bin, target, exif_args)
+        if retry2.returncode == 0:
+            return True, f"[recuperato eliminando l'EXIF preesistente, era illeggibile] {stderr}"
+
+    return False, stderr
 
 
 def output_path_for(base_output: Path, timestamp, filename: str) -> Path:
@@ -377,6 +426,12 @@ class Job:
                                     with open(error_log_path, "a", encoding="utf-8") as ef:
                                         ef.write(f"EXIFTOOL_ERROR\t{media_path}\t{err}\n")
                                 self.log(self.t("exiftool_error", name=media_path.name, err=err))
+                            elif err:
+                                # scrittura riuscita solo grazie a un fallback di recupero:
+                                # non è un errore, ma vale la pena tenerne traccia
+                                with error_log_lock:
+                                    with open(error_log_path, "a", encoding="utf-8") as ef:
+                                        ef.write(f"EXIFTOOL_RECOVERED\t{media_path}\t{err}\n")
 
                             if meta["timestamp"] is not None:
                                 ts = meta["timestamp"]
