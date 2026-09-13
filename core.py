@@ -19,6 +19,20 @@ from pathlib import Path
 MEDIA_EXTENSIONS = {".jpg", ".jpeg", ".png", ".heic", ".mp4", ".mov", ".gif"}
 JSON_SUFFIXES = (".supplemental-metadata.json", ".json")
 
+# Suffisso aggiunto da Google Foto alle copie modificate di una foto, nella
+# lingua dell'account Google al momento dell'export. Un file "Nome-modificata.jpg"
+# non ha un proprio JSON: il JSON esiste solo per l'originale "Nome.jpg".
+EDITED_SUFFIXES = (
+    "-edited",       # inglese
+    "-modificata",   # italiano
+    "-modifié",      # francese
+    "-modifiziert",  # tedesco
+    "-bearbeitet",   # tedesco (variante)
+    "-editado",      # spagnolo/portoghese
+    "-editada",      # spagnolo/portoghese (femminile)
+    "-bewerkt",      # olandese
+)
+
 
 def _bundled_exiftool_path():
     """Percorso dell'exiftool "vendored" incluso nel bundle dell'app, se presente.
@@ -65,11 +79,17 @@ def find_json_for_media(media_path: Path, dir_json_cache: dict):
         media_name + ".supplemental-metadata.json",
     ]
 
-    if media_stem.endswith("-edited"):
-        original_stem = media_stem[: -len("-edited")]
-        original_name = original_stem + media_suffix
-        candidates.append(original_name + ".json")
-        candidates.append(original_name + ".supplemental-metadata.json")
+    # Google Takeout aggiunge un suffisso alle foto modificate nell'app Google
+    # Foto, nella lingua dell'account: qui i casi noti. Il JSON associato resta
+    # quello dell'originale (senza suffisso), non ne esiste uno per la versione
+    # modificata.
+    for suffix in EDITED_SUFFIXES:
+        em = re.match(rf"^(.*){re.escape(suffix)}(\(\d+\))?$", media_stem, re.IGNORECASE)
+        if em:
+            original_stem = em.group(1) + (em.group(2) or "")
+            original_name = original_stem + media_suffix
+            candidates.append(original_name + ".json")
+            candidates.append(original_name + ".supplemental-metadata.json")
 
     m = re.match(r"^(.*)(\(\d+\))(\.[^.]+)$", media_name)
     if m:

@@ -416,6 +416,7 @@
         <label class="field-label" for="jobs" data-i18n="jobsLabel"></label>
         <input type="number" id="jobs" value="4" min="1" max="16">
       </div>
+      <div class="field-hint" data-i18n="jobsHint"></div>
     </div>
 
     <div class="field">
@@ -444,6 +445,8 @@
     </div>
 
     <div id="log"></div>
+
+    <div class="field-hint" id="summaryNote" style="display:none; margin-top:14px"></div>
   </div>
 </div>
 
@@ -459,6 +462,7 @@ const I18N = {
     choose: "Scegli…",
     choosePlaceholder: "Scegli una cartella…",
     jobsLabel: "Worker paralleli",
+    jobsHint: "Quanti file elaborare contemporaneamente. Su un disco esterno meccanico (non SSD) un valore alto può rallentare invece che velocizzare: 2-4 è spesso il punto ottimale, su SSD puoi salire tranquillamente.",
     dryRun: "Dry run — simula senza copiare o modificare nulla",
     start: "Avvia elaborazione",
     starting: "Elaborazione in corso…",
@@ -472,6 +476,9 @@ const I18N = {
     errorAlert: "Errore: ",
     pickFolderError: "Impossibile aprire il selettore di cartelle: ",
     pickFolderUnavailable: "Il selettore nativo è disponibile solo nell'app desktop.",
+    summaryMissing: "{n} file non avevano un JSON di metadati esportato da Google (normale, non un errore): copiati comunque, senza data/GPS aggiornati.",
+    summaryErrors: "{n} file hanno avuto un problema nella scrittura dei metadati che non è stato possibile recuperare automaticamente: dettagli in errors.log nella cartella di output.",
+    summaryLink: "Guida completa (FAQ)",
   },
   en: {
     subtitle: "Restores date, GPS, and description in files exported from Google Photos, reading them from the Takeout JSON files.",
@@ -483,6 +490,7 @@ const I18N = {
     choose: "Choose…",
     choosePlaceholder: "Choose a folder…",
     jobsLabel: "Parallel workers",
+    jobsHint: "How many files to process at the same time. On a mechanical external drive (not SSD) a high value can slow things down instead of speeding them up: 2-4 is usually the sweet spot, on SSD you can safely go higher.",
     dryRun: "Dry run — simulate without copying or modifying anything",
     start: "Start processing",
     starting: "Processing…",
@@ -496,8 +504,13 @@ const I18N = {
     errorAlert: "Error: ",
     pickFolderError: "Could not open the folder picker: ",
     pickFolderUnavailable: "The native picker is only available in the desktop app.",
+    summaryMissing: "{n} file{s} had no metadata JSON exported by Google (normal, not an error): copied anyway, without updated date/GPS.",
+    summaryErrors: "{n} file{s} had a metadata-writing problem that couldn't be recovered automatically: details in errors.log in the output folder.",
+    summaryLink: "Full guide (FAQ)",
   },
 };
+
+const README_FAQ_URL = "https://github.com/MEPoss/Google-Photos-Takeout-Fixer#faq-e-risoluzione-problemi";
 
 function detectLang() {
   const nav = (navigator.language || navigator.userLanguage || "en").toLowerCase();
@@ -569,6 +582,7 @@ function startJob() {
   document.getElementById('statusArea').style.display = 'block';
   document.getElementById('log').style.display = 'block';
   document.getElementById('log').textContent = '';
+  document.getElementById('summaryNote').style.display = 'none';
 
   fetch('/api/start', {
     method: 'POST',
@@ -622,8 +636,29 @@ function pollStatus(jobId) {
         if (data.state === 'error' && data.error_message) {
           alert(T.errorAlert + data.error_message);
         }
+        if (data.state === 'done') {
+          showSummaryNote(data.missing_metadata, data.errors);
+        }
       }
     });
+}
+
+function showSummaryNote(missingCount, errorsCount) {
+  const note = document.getElementById('summaryNote');
+  if (!missingCount && !errorsCount) {
+    note.style.display = 'none';
+    return;
+  }
+  let html = '';
+  if (missingCount) {
+    html += '<div>' + T.summaryMissing.replace('{n}', missingCount).replace('{s}', missingCount === 1 ? '' : 's') + '</div>';
+  }
+  if (errorsCount) {
+    html += '<div style="margin-top:4px">' + T.summaryErrors.replace('{n}', errorsCount).replace('{s}', errorsCount === 1 ? '' : 's') + '</div>';
+  }
+  html += '<div style="margin-top:6px"><a href="' + README_FAQ_URL + '" target="_blank" rel="noopener">' + T.summaryLink + ' ↗</a></div>';
+  note.innerHTML = html;
+  note.style.display = 'block';
 }
 </script>
 </body>

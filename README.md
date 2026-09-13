@@ -101,6 +101,51 @@ allegarlo alla release). Per riprodurlo in locale su una macchina Linux:
 sudo packaging/debian/build.sh 1.0.0
 ```
 
+## FAQ e risoluzione problemi
+
+**Cosa significa "Senza JSON"?**
+Sono file media per cui Google Takeout non ha esportato un file di metadati
+JSON abbinato — capita per foto duplicate, generate dall'app Google Foto
+(es. animazioni), o semplicemente per limiti dell'esportazione stessa. Non è
+un bug: il file viene comunque copiato nella cartella di output, solo senza
+data/GPS/descrizione aggiornati (mantiene la data di modifica del file
+originale).
+
+**Cosa significa "Errori"?**
+Sono file per cui è successo qualcosa di anomalo durante la scrittura dei
+metadati con `exiftool`. Il programma tenta automaticamente alcuni recuperi
+prima di arrendersi:
+
+- **Estensione non corrispondente al contenuto reale** (es. un file `.HEIC`
+  che in realtà è un JPEG, comune negli export di Google Foto): il programma
+  rinomina temporaneamente il file con l'estensione corretta, scrive i
+  metadati, poi ripristina il nome originale. Nessuna azione richiesta.
+- **Struttura EXIF interna corrotta o troncata** (es. `Can't read SubIFD
+  data`, `Error reading OtherImageStart data`, spesso su foto passate per
+  editor o riesportazioni): il programma elimina l'EXIF preesistente (già
+  parzialmente illeggibile) e riscrive solo i tag che gestisce (data, GPS,
+  descrizione). Questo viene comunque annotato in `errors.log` come
+  `EXIFTOOL_RECOVERED`, così resta visibile che è successo, anche se non ha
+  bloccato l'elaborazione.
+- **Avvisi "minori" di exiftool** (es. puntatori IFD duplicati): risolti
+  sempre in automatico, senza alcun effetto collaterale.
+
+Se dopo tutto questo un file risulta ancora in errore, il dettaglio esatto è
+scritto in `errors.log` nella cartella di output. Il caso più comune non
+risolvibile è un file con estensione immagine ma contenuto in un formato che
+`exiftool` non sa scrivere (es. un vero BMP salvato con estensione `.jpg`):
+in quel caso il file viene comunque copiato correttamente, semplicemente non
+sarà possibile aggiornarne i metadati interni.
+
+**Un file scompare o non viene copiato?**
+Non dovrebbe succedere: ogni file trovato nella cartella di input viene
+sempre copiato in output, indipendentemente dal fatto che i suoi metadati
+si riescano a scrivere o meno. Se un conteggio "Processati" risulta inferiore
+al "Totale", significa che per quel file è stato sollevato un errore
+imprevisto (categoria `EXCEPTION` in `errors.log`) prima ancora di
+raggiungere la fase di copia — apri una
+[issue](../../issues) allegando la riga corrispondente di `errors.log`.
+
 ## Struttura del progetto
 
 - [`core.py`](core.py): logica di scansione, matching JSON, scrittura exif
