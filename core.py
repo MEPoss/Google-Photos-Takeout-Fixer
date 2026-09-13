@@ -108,6 +108,15 @@ def find_json_for_media(media_path: Path, dir_json_cache: dict):
             if p.suffix.lower() == ".json" and not p.name.startswith("._")
         ]
 
+    # Fallback per i nomi troncati dal vecchio limite di lunghezza di Google
+    # Takeout: il nome del JSON è un PREFISSO troncato dell'intero nome del
+    # media (es. media "AVeryLongName1234567890.jpg", json
+    # "AVeryLongName1234.jpg.json"). Richiediamo che il nome del JSON sia
+    # interamente contenuto come prefisso del nome del media, non solo che
+    # condividano un tot di caratteri iniziali: due file con lo stesso
+    # prefisso (stessa data, stesso "PXL_", numerazione sequenziale) ma
+    # contenuto diverso dopo il prefisso NON sono un match, anche se
+    # condividono molti caratteri iniziali.
     dir_jsons = dir_json_cache[dir_path]
     media_key = media_name.lower()
     best_match = None
@@ -115,8 +124,10 @@ def find_json_for_media(media_path: Path, dir_json_cache: dict):
 
     for jp in dir_jsons:
         base = strip_json_suffix(jp.name).lower()
-        score = len(os.path.commonprefix([base, media_key]))
-        if score > best_score and score >= 8:
+        if len(base) < 8 or not media_key.startswith(base):
+            continue
+        score = len(base)
+        if score > best_score:
             best_score = score
             best_match = jp
 
