@@ -2,7 +2,16 @@
   <img src="docs/icon.png" width="128" alt="Icona Google Photos Takeout Fixer">
 </p>
 
-# Google Photos Takeout Fixer
+<h1 align="center">Google Photos Takeout Fixer</h1>
+
+<p align="center">
+  Ripristina data, GPS e descrizione nelle foto e nei video esportati da
+  Google Foto con Google Takeout — app nativa per macOS e Debian/derivate.
+</p>
+
+<p align="center">
+  <img width="749" alt="Interfaccia" src="https://github.com/user-attachments/assets/0bd71405-7050-4edf-9a4b-0341d7733efe" />
+</p>
 
 > ⚠️ **Se hai usato una versione precedente alla v1.1.4**: è stato corretto un
 > bug che, in rari casi, poteva scrivere data/GPS/descrizione presi da una
@@ -12,39 +21,44 @@
 > controlla i file con nomi simili nella stessa cartella prima di fidarti dei
 > metadati scritti — vedi i dettagli nella [release v1.1.4](../../releases/tag/v1.1.4).
 
-Ripristina i metadati (data, GPS, descrizione) nei file esportati con **Google
-Takeout** da Google Foto. Google Takeout esporta ogni foto/video insieme a un
-file JSON separato con i metadati originali, ma i file media spesso non li
-hanno embeddati in EXIF. Questo strumento li scrive dove dovrebbero stare.
+## Il problema
 
-App desktop nativa per macOS, con finestra propria: nessun terminale e nessun
-browser richiesti per l'uso quotidiano.
+Quando scarichi le tue foto da Google Foto tramite Google Takeout, l'export
+è tecnicamente completo ma **inutilizzabile così com'è**:
 
-<p align="center">
-  <img width="749" height="477" alt="image" src="https://github.com/user-attachments/assets/0bd71405-7050-4edf-9a4b-0341d7733efe" />
-</p>
+- Ogni foto/video è accompagnato da un file `.json` separato con data, GPS e
+  descrizione — ma questi dati **non sono scritti dentro il file media**
+- Aprendo le foto in Anteprima, Finder, o importandole in una libreria foto,
+  vedrai spesso la data di download invece della data reale dello scatto
+- Riordinare per data o cercare per posizione diventa impossibile
 
-## Cosa fa
+## La soluzione
 
-- Scansiona ricorsivamente una cartella Takeout estratta
-- Associa ogni file media (`jpg`, `jpeg`, `png`, `heic`, `mp4`, `mov`, `gif`)
-  al proprio JSON di metadati, con matching robusto e fallback su nomi
-  troncati o pattern `(n)` spostati
-- Scrive data scatto, coordinate GPS e descrizione nei metadati reali del
-  file (EXIF per immagini, metadata contenitore per video) usando `exiftool`
-- Aggiorna la data di modifica del file sul filesystem
-- Copia (non sposta) i file processati in `output/anno/mese`
-- Logga in `errors.log` i file senza JSON associato, senza bloccarsi
-- Mostra un riepilogo live nell'interfaccia (processati, mancanti, errori)
+Google Photos Takeout Fixer legge ogni JSON e scrive i dati reali (data,
+GPS, descrizione) **dentro** il file media stesso, usando `exiftool`, senza
+mai toccare l'export originale:
 
-## Requisiti
+- Trova il JSON giusto per ogni foto/video, anche nei casi limite (foto
+  modificate, nomi troncati, duplicati numerati)
+- Scrive i metadati con `exiftool`, recuperando automaticamente i casi più
+  comuni di file "difficili" (estensione sbagliata, EXIF corrotto)
+- Copia tutto organizzato per anno/mese in una cartella di output, senza
+  mai modificare l'originale
+- Segnala in modo trasparente cosa non è stato possibile sistemare, invece
+  di far finta di niente
 
-- macOS 11+ **oppure** Debian 12 (Bookworm) e derivate
-- Se buildi da sorgente: Python 3.10+
-- `exiftool`, incluso nella cartella `vendor/exiftool` (versione standalone
-  Perl, nessuna dipendenza da Homebrew/apt); se assente, viene usato quello
-  di sistema come fallback (`brew install exiftool` / `apt install
-  libimage-exiftool-perl`)
+## Come ottenere l'export da Google Takeout
+
+1. Vai su [takeout.google.com](https://takeout.google.com/) e clicca
+   "Deseleziona tutto"
+2. Scorri e seleziona solo **Google Foto**
+3. Scegli il formato di consegna (email è il più semplice) e una dimensione
+   massima per archivio (50GB va bene, se l'export è più grande verrà diviso
+   in più file `.zip`)
+4. Clicca "Crea esportazione" e attendi l'email di Google (può richiedere
+   ore o giorni per librerie grandi)
+5. Estrai tutti gli archivi `.zip` ricevuti in un'**unica cartella** — se
+   erano più di uno, uniscine il contenuto prima di usare questo tool
 
 ## Uso (macOS)
 
@@ -83,6 +97,48 @@ compare nel menu applicazioni, oppure si avvia da terminale con:
 ```bash
 google-photos-takeout-fixer
 ```
+
+## Utilizzo dell'app
+
+1. Clicca **"Scegli…"** e seleziona la cartella del Takeout estratto (input)
+2. Clicca **"Scegli…"** e seleziona (o crea) una cartella vuota per l'output
+3. Regola il numero di **worker paralleli** se necessario (di default 4 —
+   valori più bassi sono più sicuri su dischi esterni meccanici)
+4. Prova prima con **Dry run** attiva: simula l'intera elaborazione senza
+   copiare o modificare nulla, mostrandoti in anteprima quanti file
+   verrebbero processati, quanti senza JSON, quanti in errore
+5. Se il risultato ti convince, disattiva Dry run e avvia l'elaborazione
+   vera — l'originale non viene mai toccato, solo copiato
+
+A fine elaborazione trovi un riepilogo con link diretto alla sezione
+[FAQ](#faq-e-risoluzione-problemi) qui sotto per interpretare i numeri.
+
+## Cosa fa, nel dettaglio
+
+- Scansiona ricorsivamente una cartella Takeout estratta
+- Associa ogni file media (`jpg`, `jpeg`, `png`, `heic`, `mp4`, `mov`, `gif`)
+  al proprio JSON di metadati, con matching esatto e fallback sicuro su nomi
+  troncati o pattern `(n)` spostati, riconoscendo anche le foto modificate
+  nell'app Google Foto in più lingue (`-modificata`, `-edited`, ecc.)
+- Scrive data scatto, coordinate GPS e descrizione nei metadati reali del
+  file (EXIF per immagini, metadata contenitore per video) usando `exiftool`
+- Recupera automaticamente i casi più comuni di scrittura fallita (estensione
+  non corrispondente al contenuto reale, struttura EXIF corrotta), sempre
+  annotando in chiaro quando lo fa
+- Aggiorna la data di modifica del file sul filesystem
+- Copia (non sposta) i file processati in `output/anno/mese`
+- Logga in `errors.log` i file senza JSON associato, senza bloccarsi
+- Mostra un riepilogo live nell'interfaccia (processati, mancanti, errori),
+  in italiano o inglese in base alla lingua di sistema
+
+## Requisiti
+
+- macOS 11+ **oppure** Debian 12 (Bookworm) e derivate
+- Se buildi da sorgente: Python 3.10+
+- `exiftool`, incluso nella cartella `vendor/exiftool` (versione standalone
+  Perl, nessuna dipendenza da Homebrew/apt); se assente, viene usato quello
+  di sistema come fallback (`brew install exiftool` / `apt install
+  libimage-exiftool-perl`)
 
 ## Build da sorgente (macOS)
 
@@ -154,6 +210,13 @@ imprevisto (categoria `EXCEPTION` in `errors.log`) prima ancora di
 raggiungere la fase di copia — apri una
 [issue](../../issues) allegando la riga corrispondente di `errors.log`.
 
+**Perché il matching non è "indovina sempre qualcosa"?**
+Perché è più sicuro dire onestamente "non trovato" che abbinare la foto
+sbagliata. Il tool non tenta abbinamenti a bassa confidenza: se il nome del
+JSON non è chiaramente riconducibile al file (match esatto, foto modificata,
+o troncamento riconoscibile), il file viene copiato senza metadati invece di
+rischiare di scrivere data/GPS di uno scatto diverso.
+
 ## Struttura del progetto
 
 - [`core.py`](core.py): logica di scansione, matching JSON, scrittura exif
@@ -170,3 +233,7 @@ raggiungere la fase di copia — apri una
 
 MIT, vedi [LICENSE](LICENSE). Include ExifTool di Phil Harvey, distribuito
 sotto i termini di Perl stesso (GPL/Artistic).
+
+## Disclaimer
+
+Progetto indipendente, non affiliato con Google LLC.

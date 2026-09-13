@@ -420,6 +420,12 @@
     </div>
 
     <div class="field">
+      <label class="field-label" for="fallback_tz" data-i18n="fallbackTzLabel"></label>
+      <input type="text" id="fallback_tz" value="UTC" placeholder="Europe/Rome">
+      <div class="field-hint" data-i18n="fallbackTzHint"></div>
+    </div>
+
+    <div class="field">
       <div class="checkbox-row">
         <input type="checkbox" id="dry_run">
         <label for="dry_run" data-i18n="dryRun"></label>
@@ -463,6 +469,8 @@ const I18N = {
     choosePlaceholder: "Scegli una cartella…",
     jobsLabel: "Worker paralleli",
     jobsHint: "Quanti file elaborare contemporaneamente. Su un disco esterno meccanico (non SSD) un valore alto può rallentare invece che velocizzare: 2-4 è spesso il punto ottimale, su SSD puoi salire tranquillamente.",
+    fallbackTzLabel: "Fuso orario di riserva",
+    fallbackTzHint: "Usato solo per le foto senza GPS nel JSON: per quelle con GPS, il fuso viene calcolato automaticamente dalla posizione. Nome IANA, es. \"Europe/Rome\". Lascia \"UTC\" se non sai cosa scegliere.",
     dryRun: "Dry run — simula senza copiare o modificare nulla",
     start: "Avvia elaborazione",
     starting: "Elaborazione in corso…",
@@ -491,6 +499,8 @@ const I18N = {
     choosePlaceholder: "Choose a folder…",
     jobsLabel: "Parallel workers",
     jobsHint: "How many files to process at the same time. On a mechanical external drive (not SSD) a high value can slow things down instead of speeding them up: 2-4 is usually the sweet spot, on SSD you can safely go higher.",
+    fallbackTzLabel: "Fallback time zone",
+    fallbackTzHint: "Used only for photos without GPS in the JSON: for those with GPS, the time zone is computed automatically from location. IANA name, e.g. \"Europe/Rome\". Leave \"UTC\" if unsure.",
     dryRun: "Dry run — simulate without copying or modifying anything",
     start: "Start processing",
     starting: "Processing…",
@@ -570,6 +580,7 @@ function startJob() {
   const output_dir = document.getElementById('output_dir').value.trim();
   const dry_run = document.getElementById('dry_run').checked;
   const jobs = parseInt(document.getElementById('jobs').value, 10) || 4;
+  const fallback_tz = (document.getElementById('fallback_tz').value || 'UTC').trim();
 
   if (!input_dir || !output_dir) {
     alert(T.missingDirsAlert);
@@ -587,7 +598,7 @@ function startJob() {
   fetch('/api/start', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({input_dir, output_dir, dry_run, jobs, lang: LANG})
+    body: JSON.stringify({input_dir, output_dir, dry_run, jobs, lang: LANG, fallback_tz})
   })
   .then(r => r.json())
   .then(data => {

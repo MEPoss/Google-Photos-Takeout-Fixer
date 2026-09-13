@@ -26,7 +26,7 @@ chmod +x "$INSTALL_PREFIX"/vendor/exiftool/exiftool
 
 python3 -m venv --system-site-packages "$INSTALL_PREFIX"/venv
 "$INSTALL_PREFIX"/venv/bin/pip install --upgrade pip
-"$INSTALL_PREFIX"/venv/bin/pip install flask pywebview
+"$INSTALL_PREFIX"/venv/bin/pip install flask pywebview timezonefinder tzdata
 
 # --- 2. Assembla l'albero del pacchetto Debian ricopiando l'installazione. ---
 rm -rf /build

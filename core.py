@@ -15,6 +15,38 @@ import sys
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+_TZFINDER = None
+
+
+def _get_timezone_finder():
+    """Istanzia TimezoneFinder pigramente: il caricamento dei dati geografici
+    costa qualche decina di ms, non ha senso pagarlo se non serve mai."""
+    global _TZFINDER
+    if _TZFINDER is None:
+        from timezonefinder import TimezoneFinder
+
+        _TZFINDER = TimezoneFinder()
+    return _TZFINDER
+
+
+def resolve_timezone(lat, lng, fallback_tz: str = "UTC") -> ZoneInfo:
+    """Determina il fuso orario reale dalle coordinate GPS della foto. Se le
+    coordinate mancano o non ricadono in nessun fuso noto, usa il fuso di
+    riserva impostato dall'utente (default UTC)."""
+    if lat is not None and lng is not None:
+        try:
+            tf = _get_timezone_finder()
+            tz_name = tf.timezone_at(lat=lat, lng=lng)
+            if tz_name:
+                return ZoneInfo(tz_name)
+        except Exception:
+            pass
+    try:
+        return ZoneInfo(fallback_tz)
+    except (ZoneInfoNotFoundError, ValueError):
+        return ZoneInfo("UTC")
 
 MEDIA_EXTENSIONS = {".jpg", ".jpeg", ".png", ".heic", ".mp4", ".mov", ".gif"}
 JSON_SUFFIXES = (".supplemental-metadata.json", ".json")
@@ -169,12 +201,16 @@ def parse_json_metadata(json_path: Path) -> dict:
     return result
 
 
-def build_exiftool_args(meta: dict) -> list:
+def build_exiftool_args(meta: dict, fallback_tz: str = "UTC") -> list:
     args = []
 
     if meta["timestamp"] is not None:
-        dt = datetime.fromtimestamp(meta["timestamp"], tz=timezone.utc)
-        date_str = dt.strftime("%Y:%m:%d %H:%M:%S")
+        utc_dt = datetime.fromtimestamp(meta["timestamp"], tz=timezone.utc)
+        tz = resolve_timezone(meta["latitude"], meta["longitude"], fallback_tz)
+        local_dt = utc_dt.astimezone(tz)
+        date_str = local_dt.strftime("%Y:%m:%d %H:%M:%S")
+        offset_str = local_dt.strftime("%z")  # es. "+0200"
+        offset_str = f"{offset_str[:3]}:{offset_str[3:]}"  # exiftool vuole "+02:00"
         args += [
             f"-AllDates={date_str}",
             f"-DateTimeOriginal={date_str}",
@@ -184,6 +220,9 @@ def build_exiftool_args(meta: dict) -> list:
             f"-TrackModifyDate={date_str}",
             f"-MediaCreateDate={date_str}",
             f"-MediaModifyDate={date_str}",
+            f"-OffsetTime={offset_str}",
+            f"-OffsetTimeOriginal={offset_str}",
+            f"-OffsetTimeDigitized={offset_str}",
         ]
 
     if meta["latitude"] is not None and meta["longitude"] is not None:
@@ -350,12 +389,14 @@ STRINGS = {
 class Job:
     """Rappresenta un'esecuzione del fixer, eseguita in un thread separato."""
 
-    def __init__(self, input_dir: str, output_dir: str, dry_run: bool = False, jobs: int = 4, lang: str = "it"):
+    def __init__(self, input_dir: str, output_dir: str, dry_run: bool = False, jobs: int = 4,
+                 lang: str = "it", fallback_tz: str = "UTC"):
         self.input_root = Path(input_dir).expanduser().resolve()
         self.output_root = Path(output_dir).expanduser().resolve()
         self.dry_run = dry_run
         self.jobs = max(1, jobs)
         self.strings = STRINGS.get(lang, STRINGS["it"])
+        self.fallback_tz = fallback_tz
 
         self.state = "pending"  # pending -> scanning -> running -> done/error
         self.total = 0
@@ -448,7 +489,7 @@ class Job:
                         shutil.copy2(media_path, dest_path)
 
                         if has_metadata:
-                            exif_args = build_exiftool_args(meta)
+                            exif_args = build_exiftool_args(meta, self.fallback_tz)
                             ok, err = run_exiftool(dest_path, exif_args)
                             if not ok:
                                 with self._lock:

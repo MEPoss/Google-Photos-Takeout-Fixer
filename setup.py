@@ -29,7 +29,10 @@ DATA_FILES = collect_tree("templates") + collect_tree("vendor")
 
 OPTIONS = {
     "argv_emulation": False,
-    "packages": ["flask", "jinja2", "werkzeug", "markupsafe", "click", "itsdangerous", "blinker"],
+    "packages": [
+        "flask", "jinja2", "werkzeug", "markupsafe", "click", "itsdangerous", "blinker",
+        "timezonefinder", "timezonefinder_data", "tzdata", "numpy", "h3", "cffi",
+    ],
     "includes": ["webview", "objc", "Foundation", "AppKit", "WebKit", "Quartz", "PyObjCTools", "core", "app"],
     "iconfile": "AppIcon.icns",
     "plist": {

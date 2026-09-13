@@ -69,6 +69,7 @@ def start_job():
     input_dir = (data.get("input_dir") or "").strip()
     output_dir = (data.get("output_dir") or "").strip()
     dry_run = bool(data.get("dry_run"))
+    fallback_tz = (data.get("fallback_tz") or "UTC").strip() or "UTC"
     try:
         jobs_count = int(data.get("jobs") or 4)
     except (TypeError, ValueError):
@@ -77,7 +78,7 @@ def start_job():
     if not input_dir or not output_dir:
         return jsonify({"error": errors["missing_dirs"]}), 400
 
-    job = Job(input_dir, output_dir, dry_run=dry_run, jobs=jobs_count, lang=lang)
+    job = Job(input_dir, output_dir, dry_run=dry_run, jobs=jobs_count, lang=lang, fallback_tz=fallback_tz)
     job_id = str(uuid.uuid4())
     JOBS[job_id] = job
     job.start()
