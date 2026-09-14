@@ -6,6 +6,7 @@ metadati (con matching robusto/fallback), scrive i metadati nel file reale via
 exiftool, aggiorna la mtime e copia il risultato in output/anno/mese.
 """
 
+import csv
 import json
 import os
 import re
@@ -123,9 +124,15 @@ def find_json_for_media(media_path: Path, dir_json_cache: dict):
             candidates.append(original_name + ".json")
             candidates.append(original_name + ".supplemental-metadata.json")
 
+    # File duplicati nella stessa cartella (stesso nome caricato due volte):
+    # Google Takeout rinomina il media in "base(1).ext", "base(2).ext", ecc.
+    # Il JSON del duplicato non prende il "(n)" subito dopo il nome come ci
+    # si aspetterebbe, ma alla fine, dopo il suffisso "supplemental-metadata"
+    # (es. media "salone(1).jpg" -> json "salone.jpg.supplemental-metadata(1).json").
     m = re.match(r"^(.*)(\(\d+\))(\.[^.]+)$", media_name)
     if m:
         base, num, ext = m.groups()
+        candidates.append(f"{base}{ext}.supplemental-metadata{num}.json")
         candidates.append(f"{base}{ext}{num}.json")
         candidates.append(f"{base}{ext}{num}.supplemental-metadata.json")
 
@@ -370,6 +377,7 @@ STRINGS = {
         "exception": "[ECCEZIONE] {name}: {exc}",
         "done": "Elaborazione completata.",
         "error_log": "Log errori: {path}",
+        "match_log": "Report abbinamenti file/JSON: {path}",
         "fatal_error": "[ERRORE FATALE] {exc}",
     },
     "en": {
@@ -381,9 +389,12 @@ STRINGS = {
         "exception": "[EXCEPTION] {name}: {exc}",
         "done": "Processing complete.",
         "error_log": "Error log: {path}",
+        "match_log": "File/JSON match report: {path}",
         "fatal_error": "[FATAL ERROR] {exc}",
     },
 }
+
+MATCH_LOG_COLUMNS = ("file_media", "file_json", "file_destinazione")
 
 
 class Job:
@@ -442,6 +453,10 @@ class Job:
             error_log_path = self.output_root / "errors.log"
             error_log_path.write_text("", encoding="utf-8")
 
+            match_log_path = self.output_root / "abbinamenti.csv"
+            with open(match_log_path, "w", encoding="utf-8", newline="") as mf:
+                csv.writer(mf).writerow(MATCH_LOG_COLUMNS)
+
             self.state = "scanning"
             self.log(self.t("scanning", path=self.input_root))
             media_files = collect_media_files(self.input_root)
@@ -452,6 +467,7 @@ class Job:
             dir_json_cache = {}
             cache_lock = threading.Lock()
             error_log_lock = threading.Lock()
+            match_log_lock = threading.Lock()
 
             from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -487,6 +503,14 @@ class Job:
                         dest_path.parent.mkdir(parents=True, exist_ok=True)
                         dest_path = unique_path(dest_path)
                         shutil.copy2(media_path, dest_path)
+
+                        with match_log_lock:
+                            with open(match_log_path, "a", encoding="utf-8", newline="") as mf:
+                                csv.writer(mf).writerow([
+                                    str(media_path),
+                                    str(json_path) if json_path is not None else "",
+                                    str(dest_path),
+                                ])
 
                         if has_metadata:
                             exif_args = build_exiftool_args(meta, self.fallback_tz)
@@ -527,6 +551,8 @@ class Job:
 
             self.log(self.t("done"))
             self.log(self.t("error_log", path=error_log_path))
+            if not self.dry_run:
+                self.log(self.t("match_log", path=match_log_path))
             self.state = "done"
 
         except Exception as exc:

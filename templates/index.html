@@ -177,6 +177,28 @@
     text-overflow: ellipsis;
   }
 
+  select {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 28px;
+    padding: 0 28px 0 10px;
+    border: 1px solid var(--separator);
+    border-radius: var(--radius-control);
+    font-size: 13px;
+    background-color: var(--control-bg);
+    color: var(--label);
+    cursor: pointer;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M4 6l4 4 4-4' fill='none' stroke='%23888' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+  }
+  select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3.5px color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+
   /* Bottone "Scegli…": bordered, stessa altezza del campo */
   .btn {
     -webkit-appearance: none;
@@ -421,7 +443,36 @@
 
     <div class="field">
       <label class="field-label" for="fallback_tz" data-i18n="fallbackTzLabel"></label>
-      <input type="text" id="fallback_tz" value="UTC" placeholder="Europe/Rome">
+      <select id="fallback_tz">
+        <option value="UTC" selected>UTC</option>
+        <optgroup label="Europa">
+          <option value="Europe/Rome">Europe/Rome (Italia)</option>
+          <option value="Europe/London">Europe/London</option>
+          <option value="Europe/Paris">Europe/Paris</option>
+          <option value="Europe/Berlin">Europe/Berlin</option>
+          <option value="Europe/Madrid">Europe/Madrid</option>
+          <option value="Europe/Amsterdam">Europe/Amsterdam</option>
+          <option value="Europe/Athens">Europe/Athens</option>
+          <option value="Europe/Moscow">Europe/Moscow</option>
+        </optgroup>
+        <optgroup label="Americhe">
+          <option value="America/New_York">America/New_York</option>
+          <option value="America/Chicago">America/Chicago</option>
+          <option value="America/Denver">America/Denver</option>
+          <option value="America/Los_Angeles">America/Los_Angeles</option>
+          <option value="America/Sao_Paulo">America/Sao_Paulo</option>
+          <option value="America/Mexico_City">America/Mexico_City</option>
+        </optgroup>
+        <optgroup label="Asia e Oceania">
+          <option value="Asia/Dubai">Asia/Dubai</option>
+          <option value="Asia/Kolkata">Asia/Kolkata</option>
+          <option value="Asia/Shanghai">Asia/Shanghai</option>
+          <option value="Asia/Tokyo">Asia/Tokyo</option>
+          <option value="Asia/Singapore">Asia/Singapore</option>
+          <option value="Australia/Sydney">Australia/Sydney</option>
+          <option value="Pacific/Auckland">Pacific/Auckland</option>
+        </optgroup>
+      </select>
       <div class="field-hint" data-i18n="fallbackTzHint"></div>
     </div>
 

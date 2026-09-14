@@ -6,7 +6,7 @@
 
 <p align="center">
   Ripristina data, GPS e descrizione nelle foto e nei video esportati da
-  Google Foto con Google Takeout — app nativa per macOS e Debian/derivate.
+  Google Foto con Google Takeout.
 </p>
 
 <p align="center">
@@ -35,83 +35,70 @@ Quando scarichi le tue foto da Google Foto tramite Google Takeout, l'export
 ## La soluzione
 
 Google Photos Takeout Fixer legge ogni JSON e scrive i dati reali (data,
-GPS, descrizione) **dentro** il file media stesso, usando `exiftool`, senza
-mai toccare l'export originale:
+GPS, descrizione) **dentro** il file media stesso, usando `exiftool`:
 
-- Trova il JSON giusto per ogni foto/video, anche nei casi limite (foto
-  modificate, nomi troncati, duplicati numerati)
-- Scrive i metadati con `exiftool`, recuperando automaticamente i casi più
-  comuni di file "difficili" (estensione sbagliata, EXIF corrotto)
-- Copia tutto organizzato per anno/mese in una cartella di output, senza
-  mai modificare l'originale
-- Segnala in modo trasparente cosa non è stato possibile sistemare, invece
-  di far finta di niente
+- **Scrive i metadati EXIF** direttamente nei file media, calcolando anche
+  il fuso orario reale dalle coordinate GPS invece di un finto UTC
+- **Organizza i file** in output per anno/mese, senza mai toccare l'originale
+- **Recupera automaticamente** i casi più comuni di scrittura fallita
+  (estensione sbagliata, EXIF corrotto), segnalando sempre in chiaro cosa
+  non è stato possibile sistemare, invece di far finta di niente
 
-## Come ottenere l'export da Google Takeout
+## Tutorial
+
+### 1. Preparazione
+
+Per usare Google Photos Takeout Fixer devi prima scaricare le tue foto da
+Google Takeout ed estrarle:
 
 1. Vai su [takeout.google.com](https://takeout.google.com/) e clicca
    "Deseleziona tutto"
 2. Scorri e seleziona solo **Google Foto**
-3. Scegli il formato di consegna (email è il più semplice) e una dimensione
-   massima per archivio (50GB va bene, se l'export è più grande verrà diviso
-   in più file `.zip`)
-4. Clicca "Crea esportazione" e attendi l'email di Google (può richiedere
-   ore o giorni per librerie grandi)
-5. Estrai tutti gli archivi `.zip` ricevuti in un'**unica cartella** — se
-   erano più di uno, uniscine il contenuto prima di usare questo tool
+3. Scorri fino in fondo e clicca "Passaggio successivo"
+4. Nella sezione "Trasferisci a", scegli come vuoi ricevere il link di
+   download (email è il più semplice). Per "Dimensione file", scegli 50GB
+   per una gestione più semplice
+5. Clicca "Crea esportazione" e segui le istruzioni. Può richiedere ore o
+   giorni per librerie grandi
 
-## Uso (macOS)
+> [!NOTE]
+> Se il tuo export supera i 50GB e viene diviso in più archivi, estraili
+> tutti e unisci il contenuto in un'**unica cartella** prima di usare
+> Google Photos Takeout Fixer.
 
-Scarica il `.dmg` dalla sezione [Releases](../../releases), trascina l'app in
-Applications, aprila. Al primo avvio macOS potrebbe avvisare che l'app è di
-uno sviluppatore non identificato (non è firmata né notarizzata: richiederebbe
-un account Apple Developer a pagamento): click destro sull'icona, poi **Apri**,
-poi conferma, una volta sola.
+### 2. Installazione
 
-Se anche così non si apre ("è danneggiata" o l'app non parte), rimuovi
-l'attributo di quarantena da terminale e riprova:
+1. Scarica l'ultima versione dalla [pagina delle release](../../releases) —
+   scegli quella per il tuo sistema operativo (`.dmg` per macOS, `.deb` per
+   Debian/derivate)
+2. **macOS**: trascina l'app in Applications, poi aprila
+3. **Debian/derivate**: installa con `sudo apt install ./nome-file.deb`
 
-```bash
-xattr -cr "/Applications/Google Photos Takeout Fixer.app"
-open "/Applications/Google Photos Takeout Fixer.app"
-```
+> [!IMPORTANT]
+> Su macOS, al primo avvio potrebbe comparire un avviso di sicurezza perché
+> l'app non è firmata/notarizzata (richiederebbe un account Apple Developer
+> a pagamento). **Click destro sull'icona → Apri**, poi conferma — basta
+> farlo una volta. Se non basta, vedi [Risoluzione problemi](#risoluzione-problemi-allavvio-macos)
+> qui sotto.
 
-Per vedere l'eventuale errore in chiaro, avvia il binario direttamente:
-
-```bash
-"/Applications/Google Photos Takeout Fixer.app/Contents/MacOS/Google Photos Takeout Fixer"
-```
-
-## Uso (Debian / derivate)
-
-Scarica il pacchetto `.deb` dalla sezione [Releases](../../releases) e
-installalo:
-
-```bash
-sudo apt install ./google-photos-takeout-fixer_<versione>_all.deb
-```
-
-`apt` risolve da solo le dipendenze (Python 3, GTK, WebKit2GTK, Perl). L'app
-compare nel menu applicazioni, oppure si avvia da terminale con:
-
-```bash
-google-photos-takeout-fixer
-```
-
-## Utilizzo dell'app
+### 3. Utilizzo di Google Photos Takeout Fixer
 
 1. Clicca **"Scegli…"** e seleziona la cartella del Takeout estratto (input)
 2. Clicca **"Scegli…"** e seleziona (o crea) una cartella vuota per l'output
 3. Regola il numero di **worker paralleli** se necessario (di default 4 —
    valori più bassi sono più sicuri su dischi esterni meccanici)
-4. Prova prima con **Dry run** attiva: simula l'intera elaborazione senza
+4. Imposta un **fuso orario di riserva** se la maggior parte delle tue foto
+   senza GPS proviene da un unico paese (default UTC)
+5. Prova prima con **Dry run** attiva: simula l'intera elaborazione senza
    copiare o modificare nulla, mostrandoti in anteprima quanti file
    verrebbero processati, quanti senza JSON, quanti in errore
-5. Se il risultato ti convince, disattiva Dry run e avvia l'elaborazione
+6. Se il risultato ti convince, disattiva Dry run e avvia l'elaborazione
    vera — l'originale non viene mai toccato, solo copiato
 
-A fine elaborazione trovi un riepilogo con link diretto alla sezione
-[FAQ](#faq-e-risoluzione-problemi) qui sotto per interpretare i numeri.
+Una volta completata l'elaborazione, trovi i file sistemati nella cartella
+di output che hai scelto, organizzati per anno/mese, con un riepilogo e un
+link diretto alla sezione [FAQ](#faq-e-risoluzione-problemi) per interpretare
+i numeri.
 
 ## Cosa fa, nel dettaglio
 
@@ -122,6 +109,8 @@ A fine elaborazione trovi un riepilogo con link diretto alla sezione
   nell'app Google Foto in più lingue (`-modificata`, `-edited`, ecc.)
 - Scrive data scatto, coordinate GPS e descrizione nei metadati reali del
   file (EXIF per immagini, metadata contenitore per video) usando `exiftool`
+- Calcola il fuso orario reale dalla posizione GPS (libreria offline, nessuna
+  chiamata di rete), con un fuso di riserva selezionabile per i file senza GPS
 - Recupera automaticamente i casi più comuni di scrittura fallita (estensione
   non corrispondente al contenuto reale, struttura EXIF corrotta), sempre
   annotando in chiaro quando lo fa
@@ -140,7 +129,25 @@ A fine elaborazione trovi un riepilogo con link diretto alla sezione
   di sistema come fallback (`brew install exiftool` / `apt install
   libimage-exiftool-perl`)
 
-## Build da sorgente (macOS)
+## Risoluzione problemi all'avvio (macOS)
+
+Se l'app non si apre nemmeno con click destro → Apri ("è danneggiata" o
+non parte), rimuovi l'attributo di quarantena da terminale e riprova:
+
+```bash
+xattr -cr "/Applications/Google Photos Takeout Fixer.app"
+open "/Applications/Google Photos Takeout Fixer.app"
+```
+
+Per vedere l'eventuale errore in chiaro, avvia il binario direttamente:
+
+```bash
+"/Applications/Google Photos Takeout Fixer.app/Contents/MacOS/Google Photos Takeout Fixer"
+```
+
+## Development
+
+### Build da sorgente (macOS)
 
 ```bash
 python3 -m venv .venv
@@ -153,7 +160,7 @@ L'app congelata finisce in `dist/Google Photos Takeout Fixer.app`, completa di
 Python, dipendenze ed `exiftool` bundlati: non richiede nulla installato sul
 Mac di destinazione.
 
-## Build del pacchetto Debian
+### Build del pacchetto Debian
 
 Il `.deb` viene costruito e testato automaticamente da
 [`.github/workflows/build-deb.yml`](.github/workflows/build-deb.yml) dentro un
@@ -164,6 +171,18 @@ allegarlo alla release). Per riprodurlo in locale su una macchina Linux:
 ```bash
 sudo packaging/debian/build.sh 1.0.0
 ```
+
+### Struttura del progetto
+
+- [`core.py`](core.py): logica di scansione, matching JSON, scrittura exif
+- [`app.py`](app.py): server locale interno (usato solo dall'app, non pensato
+  per essere aperto direttamente in un browser)
+- [`launcher.py`](launcher.py): avvio come app nativa via `pywebview`
+  (Cocoa su macOS, GTK/WebKit2 su Linux)
+- [`templates/index.html`](templates/index.html): interfaccia (IT/EN)
+- [`setup.py`](setup.py): build `.app` macOS con `py2app`
+- [`packaging/debian`](packaging/debian): script e file per il pacchetto `.deb`
+- [`vendor/exiftool`](vendor/exiftool): distribuzione standalone di ExifTool
 
 ## FAQ e risoluzione problemi
 
@@ -217,23 +236,21 @@ JSON non è chiaramente riconducibile al file (match esatto, foto modificata,
 o troncamento riconoscibile), il file viene copiato senza metadati invece di
 rischiare di scrivere data/GPS di uno scatto diverso.
 
-## Struttura del progetto
-
-- [`core.py`](core.py): logica di scansione, matching JSON, scrittura exif
-- [`app.py`](app.py): server locale interno (usato solo dall'app, non pensato
-  per essere aperto direttamente in un browser)
-- [`launcher.py`](launcher.py): avvio come app nativa via `pywebview`
-  (Cocoa su macOS, GTK/WebKit2 su Linux)
-- [`templates/index.html`](templates/index.html): interfaccia (IT/EN)
-- [`setup.py`](setup.py): build `.app` macOS con `py2app`
-- [`packaging/debian`](packaging/debian): script e file per il pacchetto `.deb`
-- [`vendor/exiftool`](vendor/exiftool): distribuzione standalone di ExifTool
-
 ## Licenza
 
-MIT, vedi [LICENSE](LICENSE). Include ExifTool di Phil Harvey, distribuito
-sotto i termini di Perl stesso (GPL/Artistic).
+Google Photos Takeout Fixer è distribuito sotto licenza **MIT** — vedi
+[LICENSE](LICENSE) per il testo completo. Puoi usarlo, modificarlo e
+ridistribuirlo liberamente.
+
+Le librerie usate possono avere licenze diverse. In particolare, questo
+progetto include una copia di [ExifTool](https://exiftool.org/) di Phil
+Harvey, distribuito sotto gli stessi termini di Perl (GPL o Artistic
+License, a scelta) — vedi la relativa documentazione per i dettagli.
 
 ## Disclaimer
 
-Progetto indipendente, non affiliato con Google LLC.
+Progetto indipendente e gratuito, non affiliato con Google LLC. Fornito
+"così com'è", senza garanzie di alcun tipo: usalo a tuo rischio, e mantieni
+sempre una copia dell'export Takeout originale finché non sei soddisfatto
+del risultato (questo tool non modifica mai l'originale, solo la copia in
+output).
