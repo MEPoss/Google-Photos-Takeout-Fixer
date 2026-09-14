@@ -13,14 +13,6 @@
   <img width="749" alt="Interfaccia" src="https://github.com/user-attachments/assets/0bd71405-7050-4edf-9a4b-0341d7733efe" />
 </p>
 
-> ⚠️ **Se hai usato una versione precedente alla v1.1.4**: è stato corretto un
-> bug che, in rari casi, poteva scrivere data/GPS/descrizione presi da una
-> foto sbagliata (nomi file molto simili tra loro nella stessa cartella,
-> es. stessa data, stesso prefisso "PXL_", numerazione sequenziale). Aggiorna
-> all'ultima versione. Se hai già processato foto con una versione precedente,
-> controlla i file con nomi simili nella stessa cartella prima di fidarti dei
-> metadati scritti — vedi i dettagli nella [release v1.1.4](../../releases/tag/v1.1.4).
-
 ## Il problema
 
 Quando scarichi le tue foto da Google Foto tramite Google Takeout, l'export
