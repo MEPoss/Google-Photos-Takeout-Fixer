@@ -350,6 +350,23 @@
   .status-badge.done { background: color-mix(in srgb, var(--green) 15%, transparent); color: var(--green); }
   .status-badge.error { background: color-mix(in srgb, var(--red) 15%, transparent); color: var(--red); }
   .status-badge.scanning { background: color-mix(in srgb, var(--orange) 15%, transparent); color: var(--orange); }
+  .status-badge.cancelled { background: color-mix(in srgb, var(--label-tertiary) 40%, transparent); color: var(--label-secondary); }
+
+  .btn-cancel {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 24px;
+    padding: 0 12px;
+    border-radius: var(--radius-control);
+    font-size: 11.5px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid var(--separator);
+    background: var(--control-bg);
+    color: var(--red);
+  }
+  .btn-cancel:hover { background: color-mix(in srgb, var(--red) 8%, var(--control-bg)); }
+  .btn-cancel:disabled { color: var(--label-tertiary); cursor: default; }
 
   .progress-outer {
     background: var(--separator);
@@ -367,7 +384,7 @@
 
   .stats {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 8px;
     margin-top: 14px;
   }
@@ -382,6 +399,7 @@
   .stat.errors .num { color: var(--red); }
   .stat.missing .num { color: var(--orange); }
   .stat.done .num { color: var(--green); }
+  .stat.duplicates .num { color: var(--label-secondary); }
 
   #log {
     background: color-mix(in srgb, black 4%, var(--window-bg));
@@ -491,6 +509,7 @@
   <div class="group-box" id="statusArea" style="display:none">
     <div class="status-header">
       <span id="statusBadge" class="status-badge"></span>
+      <button id="cancelBtn" class="btn-cancel" onclick="cancelJob()" data-i18n="cancel" style="display:none"></button>
     </div>
     <div class="progress-outer"><div class="progress-inner" id="progressBar"></div></div>
 
@@ -499,6 +518,7 @@
       <div class="stat done"><div class="num" id="statProcessed">0</div><div class="lbl" data-i18n="statProcessed"></div></div>
       <div class="stat missing"><div class="num" id="statMissing">0</div><div class="lbl" data-i18n="statMissing"></div></div>
       <div class="stat errors"><div class="num" id="statErrors">0</div><div class="lbl" data-i18n="statErrors"></div></div>
+      <div class="stat duplicates"><div class="num" id="statDuplicates">0</div><div class="lbl" data-i18n="statDuplicates"></div></div>
     </div>
 
     <div id="log"></div>
@@ -529,15 +549,21 @@ const I18N = {
     statProcessed: "Processati",
     statMissing: "Senza JSON",
     statErrors: "Errori",
-    statusLabels: {pending: 'In attesa', scanning: 'Scansione in corso', running: 'Elaborazione in corso', done: 'Completato', error: 'Errore'},
+    statDuplicates: "Duplicati",
+    statusLabels: {pending: 'In attesa', scanning: 'Scansione in corso', running: 'Elaborazione in corso', done: 'Completato', error: 'Errore', cancelled: 'Annullato'},
     missingDirsAlert: "Inserisci sia la cartella di input che quella di output.",
     commErrorAlert: "Errore di comunicazione con il server: ",
     errorAlert: "Errore: ",
     pickFolderError: "Impossibile aprire il selettore di cartelle: ",
     pickFolderUnavailable: "Il selettore nativo è disponibile solo nell'app desktop.",
+    summaryDuplicates: "{n} file erano duplicati identici della stessa foto/video presenti in più album di Google Foto: ne è stata copiata una sola copia (dettagli in duplicati.csv nella cartella di output).",
     summaryMissing: "{n} file non avevano un JSON di metadati esportato da Google (normale, non un errore): copiati comunque, senza data/GPS aggiornati.",
     summaryErrors: "{n} file hanno avuto un problema nella scrittura dei metadati che non è stato possibile recuperare automaticamente: dettagli in errors.log nella cartella di output.",
     summaryLink: "Guida completa (FAQ)",
+    cancel: "Annulla",
+    cancelling: "Annullamento…",
+    cancelConfirm: "Interrompere l'elaborazione? I file già scritti finora verranno mantenuti così come sono.",
+    cancelledNote: "Elaborazione annullata: i file già scritti sono stati mantenuti nella cartella di output, quelli non ancora iniziati non sono stati toccati.",
   },
   en: {
     subtitle: "Restores date, GPS, and description in files exported from Google Photos, reading them from the Takeout JSON files.",
@@ -559,15 +585,21 @@ const I18N = {
     statProcessed: "Processed",
     statMissing: "Missing JSON",
     statErrors: "Errors",
-    statusLabels: {pending: 'Pending', scanning: 'Scanning', running: 'Processing', done: 'Done', error: 'Error'},
+    statDuplicates: "Duplicates",
+    statusLabels: {pending: 'Pending', scanning: 'Scanning', running: 'Processing', done: 'Done', error: 'Error', cancelled: 'Cancelled'},
     missingDirsAlert: "Please select both the input and output folders.",
     commErrorAlert: "Server communication error: ",
     errorAlert: "Error: ",
     pickFolderError: "Could not open the folder picker: ",
     pickFolderUnavailable: "The native picker is only available in the desktop app.",
+    summaryDuplicates: "{n} file{s} were identical duplicates of the same photo/video present in multiple Google Photos albums: only one copy was kept (details in duplicati.csv in the output folder).",
     summaryMissing: "{n} file{s} had no metadata JSON exported by Google (normal, not an error): copied anyway, without updated date/GPS.",
     summaryErrors: "{n} file{s} had a metadata-writing problem that couldn't be recovered automatically: details in errors.log in the output folder.",
     summaryLink: "Full guide (FAQ)",
+    cancel: "Cancel",
+    cancelling: "Cancelling…",
+    cancelConfirm: "Stop processing? Files already written so far will be kept as they are.",
+    cancelledNote: "Processing cancelled: files already written were kept in the output folder, files not yet started were left untouched.",
   },
 };
 
@@ -597,6 +629,7 @@ applyTranslations();
 
 let pollTimer = null;
 let pywebviewReady = false;
+let currentJobId = null;
 
 window.addEventListener('pywebviewready', function () {
   pywebviewReady = true;
@@ -646,6 +679,11 @@ function startJob() {
   document.getElementById('log').textContent = '';
   document.getElementById('summaryNote').style.display = 'none';
 
+  const cancelBtn = document.getElementById('cancelBtn');
+  cancelBtn.disabled = false;
+  cancelBtn.textContent = T.cancel;
+  cancelBtn.style.display = 'inline-block';
+
   fetch('/api/start', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -657,15 +695,27 @@ function startJob() {
       alert(data.error);
       btn.disabled = false;
       btn.textContent = T.start;
+      cancelBtn.style.display = 'none';
       return;
     }
+    currentJobId = data.job_id;
     pollTimer = setInterval(() => pollStatus(data.job_id), 800);
   })
   .catch(err => {
     alert(T.commErrorAlert + err);
     btn.disabled = false;
     btn.textContent = T.start;
+    cancelBtn.style.display = 'none';
   });
+}
+
+function cancelJob() {
+  if (!currentJobId) return;
+  if (!confirm(T.cancelConfirm)) return;
+  const cancelBtn = document.getElementById('cancelBtn');
+  cancelBtn.disabled = true;
+  cancelBtn.textContent = T.cancelling;
+  fetch('/api/cancel/' + currentJobId, { method: 'POST' }).catch(() => {});
 }
 
 function pollStatus(jobId) {
@@ -682,6 +732,7 @@ function pollStatus(jobId) {
       document.getElementById('statProcessed').textContent = data.processed;
       document.getElementById('statMissing').textContent = data.missing_metadata;
       document.getElementById('statErrors').textContent = data.errors;
+      document.getElementById('statDuplicates').textContent = data.duplicates_skipped;
 
       const pct = data.total > 0 ? Math.round((data.processed / data.total) * 100) : 0;
       document.getElementById('progressBar').style.width = pct + '%';
@@ -690,30 +741,39 @@ function pollStatus(jobId) {
       logEl.textContent = data.log_tail.join('\n');
       logEl.scrollTop = logEl.scrollHeight;
 
-      if (data.state === 'done' || data.state === 'error') {
+      if (data.state === 'done' || data.state === 'error' || data.state === 'cancelled') {
         clearInterval(pollTimer);
         const btn = document.getElementById('startBtn');
         btn.disabled = false;
         btn.textContent = T.start;
+        document.getElementById('cancelBtn').style.display = 'none';
         if (data.state === 'error' && data.error_message) {
           alert(T.errorAlert + data.error_message);
         }
         if (data.state === 'done') {
-          showSummaryNote(data.missing_metadata, data.errors);
+          showSummaryNote(data.missing_metadata, data.errors, data.duplicates_skipped);
+        }
+        if (data.state === 'cancelled') {
+          const note = document.getElementById('summaryNote');
+          note.innerHTML = '<div>' + T.cancelledNote + '</div>';
+          note.style.display = 'block';
         }
       }
     });
 }
 
-function showSummaryNote(missingCount, errorsCount) {
+function showSummaryNote(missingCount, errorsCount, duplicatesCount) {
   const note = document.getElementById('summaryNote');
-  if (!missingCount && !errorsCount) {
+  if (!missingCount && !errorsCount && !duplicatesCount) {
     note.style.display = 'none';
     return;
   }
   let html = '';
+  if (duplicatesCount) {
+    html += '<div>' + T.summaryDuplicates.replace('{n}', duplicatesCount).replace('{s}', duplicatesCount === 1 ? '' : 's') + '</div>';
+  }
   if (missingCount) {
-    html += '<div>' + T.summaryMissing.replace('{n}', missingCount).replace('{s}', missingCount === 1 ? '' : 's') + '</div>';
+    html += '<div style="margin-top:4px">' + T.summaryMissing.replace('{n}', missingCount).replace('{s}', missingCount === 1 ? '' : 's') + '</div>';
   }
   if (errorsCount) {
     html += '<div style="margin-top:4px">' + T.summaryErrors.replace('{n}', errorsCount).replace('{s}', errorsCount === 1 ? '' : 's') + '</div>';

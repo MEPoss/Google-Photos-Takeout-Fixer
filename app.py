@@ -94,5 +94,14 @@ def job_status(job_id):
     return jsonify(job.to_dict())
 
 
+@app.route("/api/cancel/<job_id>", methods=["POST"])
+def cancel_job(job_id):
+    job = JOBS.get(job_id)
+    if job is None:
+        return jsonify({"error": API_ERRORS[_lang()]["job_not_found"]}), 404
+    job.cancel()
+    return jsonify({"ok": True})
+
+
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=5050, debug=False)

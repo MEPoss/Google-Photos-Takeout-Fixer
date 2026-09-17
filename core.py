@@ -7,6 +7,7 @@ exiftool, aggiorna la mtime e copia il risultato in output/anno/mese.
 """
 
 import csv
+import hashlib
 import json
 import os
 import re
@@ -452,11 +453,75 @@ def collect_media_files(input_root: Path) -> list:
     return files
 
 
+def _file_hash(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def dedupe_identical_files(media_files: list) -> tuple:
+    """Una stessa foto/video che appartiene a più album di Google Foto viene
+    esportata da Google Takeout una volta per ogni album: stesso nome, stesso
+    contenuto, in cartelle diverse. Qui li individuiamo e ne teniamo solo
+    una copia, per non finire con "foto.jpg", "foto_1.jpg", "foto_2.jpg" in
+    output quando in realtà è sempre la stessa identica foto.
+
+    Il confronto è in due fasi per essere certi al 100% che siano davvero
+    lo stesso file, non solo un nome coincidente:
+    1. Raggruppamento veloce per nome (case-insensitive) + dimensione in byte.
+    2. Solo dentro questi gruppi "sospetti", calcolo di uno SHA-256 su tutto
+       il contenuto: vengono trattati come duplicati solo i file con hash
+       identico (zero rischio di falsi positivi).
+
+    Ritorna (file_da_elaborare, coppie_scartate) dove coppie_scartate è una
+    lista di (file_tenuto, file_scartato) per il report di trasparenza.
+    """
+    by_name_size = {}
+    for p in media_files:
+        try:
+            size = p.stat().st_size
+        except OSError:
+            size = None
+        by_name_size.setdefault((p.name.lower(), size), []).append(p)
+
+    kept = []
+    duplicates = []
+
+    for group in by_name_size.values():
+        if len(group) == 1:
+            kept.append(group[0])
+            continue
+
+        by_hash = {}
+        for p in group:
+            try:
+                digest = _file_hash(p)
+            except OSError:
+                # Illeggibile: non rischiamo di scartarlo, lo teniamo com'è.
+                digest = f"__unreadable__{id(p)}"
+            by_hash.setdefault(digest, []).append(p)
+
+        for hash_group in by_hash.values():
+            hash_group.sort(key=str)
+            kept.append(hash_group[0])
+            for extra in hash_group[1:]:
+                duplicates.append((hash_group[0], extra))
+
+    return kept, duplicates
+
+
 STRINGS = {
     "it": {
         "input_not_found": "Cartella di input non trovata: {path}",
         "scanning": "Scansione di {path} ...",
         "found_files": "Trovati {n} file media da elaborare.",
+        "found_duplicates": (
+            "{n} file duplicati (stesso contenuto, presenti in più album) "
+            "trovati: ne verrà copiato uno solo per ciascuno."
+        ),
+        "duplicates_log": "Elenco duplicati scartati: {path}",
         "no_json": "[NO JSON] {name}",
         "exiftool_error": "[ERRORE exiftool] {name}: {err}",
         "exception": "[ECCEZIONE] {name}: {exc}",
@@ -464,11 +529,22 @@ STRINGS = {
         "error_log": "Log errori: {path}",
         "match_log": "Report abbinamenti file/JSON: {path}",
         "fatal_error": "[ERRORE FATALE] {exc}",
+        "cancelled": "Elaborazione annullata dall'utente: i file già scritti sono stati mantenuti.",
+        "insufficient_space": (
+            "Spazio libero insufficiente nella cartella di output: servono "
+            "circa {needed} ma ne risultano disponibili solo {available}. "
+            "Nessun file è stato scritto."
+        ),
     },
     "en": {
         "input_not_found": "Input folder not found: {path}",
         "scanning": "Scanning {path} ...",
         "found_files": "Found {n} media files to process.",
+        "found_duplicates": (
+            "{n} duplicate files found (identical content, present in "
+            "multiple albums): only one copy of each will be kept."
+        ),
+        "duplicates_log": "Discarded duplicates list: {path}",
         "no_json": "[NO JSON] {name}",
         "exiftool_error": "[exiftool ERROR] {name}: {err}",
         "exception": "[EXCEPTION] {name}: {exc}",
@@ -476,10 +552,24 @@ STRINGS = {
         "error_log": "Error log: {path}",
         "match_log": "File/JSON match report: {path}",
         "fatal_error": "[FATAL ERROR] {exc}",
+        "cancelled": "Processing cancelled by the user: files already written were kept.",
+        "insufficient_space": (
+            "Not enough free space in the output folder: about {needed} "
+            "needed, but only {available} available. No file was written."
+        ),
     },
 }
 
+
+def _format_size(num_bytes: int) -> str:
+    size = float(num_bytes)
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if size < 1024 or unit == "TB":
+            return f"{size:.1f} {unit}" if unit != "B" else f"{int(size)} {unit}"
+        size /= 1024
+
 MATCH_LOG_COLUMNS = ("file_media", "file_json", "file_destinazione")
+DUPLICATES_LOG_COLUMNS = ("file_tenuto", "file_scartato")
 
 
 class Job:
@@ -494,13 +584,15 @@ class Job:
         self.strings = STRINGS.get(lang, STRINGS["it"])
         self.fallback_tz = fallback_tz
 
-        self.state = "pending"  # pending -> scanning -> running -> done/error
+        self.state = "pending"  # pending -> scanning -> running -> done/error/cancelled
         self.total = 0
         self.processed = 0
         self.missing_metadata = 0
         self.errors = 0
+        self.duplicates_skipped = 0
         self.log_lines = []
         self.error_message = None
+        self.cancelled = False
         self._lock = threading.Lock()
         self._thread = None
 
@@ -521,6 +613,7 @@ class Job:
                 "processed": self.processed,
                 "missing_metadata": self.missing_metadata,
                 "errors": self.errors,
+                "duplicates_skipped": self.duplicates_skipped,
                 "error_message": self.error_message,
                 "log_tail": self.log_lines[-200:],
             }
@@ -528,6 +621,13 @@ class Job:
     def start(self):
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
+
+    def cancel(self):
+        """Richiede l'interruzione cooperativa della run: i file non ancora
+        iniziati vengono saltati, quelli già in corso di copia/scrittura
+        vengono comunque portati a termine (non si interrompe mai un file
+        a metà), e nessun file già scritto viene toccato o rimosso."""
+        self.cancelled = True
 
     def _run(self):
         try:
@@ -542,11 +642,48 @@ class Job:
             with open(match_log_path, "w", encoding="utf-8", newline="") as mf:
                 csv.writer(mf).writerow(MATCH_LOG_COLUMNS)
 
+            duplicates_log_path = self.output_root / "duplicati.csv"
+            with open(duplicates_log_path, "w", encoding="utf-8", newline="") as df:
+                csv.writer(df).writerow(DUPLICATES_LOG_COLUMNS)
+
             self.state = "scanning"
             self.log(self.t("scanning", path=self.input_root))
             media_files = collect_media_files(self.input_root)
+            self.log(self.t("found_files", n=len(media_files)))
+
+            # Una stessa foto/video che appartiene a più album di Google Foto
+            # viene esportata da Google una volta per ogni album: stesso
+            # contenuto, cartelle diverse. Le individuiamo (per nome+dimensione,
+            # poi confermate byte-per-byte con SHA-256) e ne teniamo una sola
+            # copia, altrimenti finirebbero in output come "foto.jpg",
+            # "foto_1.jpg", "foto_2.jpg" pur essendo la stessa identica foto.
+            media_files, duplicate_pairs = dedupe_identical_files(media_files)
+            self.duplicates_skipped = len(duplicate_pairs)
+            if duplicate_pairs:
+                self.log(self.t("found_duplicates", n=self.duplicates_skipped))
+                with open(duplicates_log_path, "a", encoding="utf-8", newline="") as df:
+                    writer = csv.writer(df)
+                    for kept, skipped in duplicate_pairs:
+                        writer.writerow([str(kept), str(skipped)])
+                self.log(self.t("duplicates_log", path=duplicates_log_path))
+
             self.total = len(media_files)
-            self.log(self.t("found_files", n=self.total))
+
+            if not self.dry_run:
+                needed = 0
+                for mf in media_files:
+                    try:
+                        needed += mf.stat().st_size
+                    except OSError:
+                        pass
+                available = shutil.disk_usage(self.output_root).free
+                if available < needed:
+                    raise RuntimeError(self.t(
+                        "insufficient_space",
+                        needed=_format_size(needed),
+                        available=_format_size(available),
+                    ))
+
             dir_name_index = build_dir_name_index(self.input_root)
 
             self.state = "running"
@@ -559,6 +696,12 @@ class Job:
             from concurrent.futures import ThreadPoolExecutor, as_completed
 
             def process_one(media_path: Path):
+                if self.cancelled:
+                    # Interruzione cooperativa: i file non ancora avviati
+                    # vengono saltati senza contarli né come processati né
+                    # come errori; quelli già in corso (già dentro questa
+                    # funzione) proseguono fino in fondo.
+                    return
                 try:
                     with cache_lock:
                         json_path = find_json_for_media(media_path, dir_json_cache, dir_sibling_cache, dir_name_index)
@@ -636,11 +779,18 @@ class Job:
                 for _ in as_completed(futures):
                     pass
 
-            self.log(self.t("done"))
-            self.log(self.t("error_log", path=error_log_path))
-            if not self.dry_run:
-                self.log(self.t("match_log", path=match_log_path))
-            self.state = "done"
+            if self.cancelled:
+                self.log(self.t("cancelled"))
+                self.log(self.t("error_log", path=error_log_path))
+                if not self.dry_run:
+                    self.log(self.t("match_log", path=match_log_path))
+                self.state = "cancelled"
+            else:
+                self.log(self.t("done"))
+                self.log(self.t("error_log", path=error_log_path))
+                if not self.dry_run:
+                    self.log(self.t("match_log", path=match_log_path))
+                self.state = "done"
 
         except Exception as exc:
             self.error_message = str(exc)
