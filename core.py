@@ -101,16 +101,53 @@ def strip_json_suffix(name: str) -> str:
     return name
 
 
-def find_json_for_media(media_path: Path, dir_json_cache: dict):
+MOTION_PHOTO_IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".heic", ".png")
+MOTION_PHOTO_VIDEO_EXTENSIONS = (".mp4", ".mov")
+
+
+def _json_candidates_for_name(name: str) -> list:
+    """Genera i possibili nomi di JSON per un nome di file media (con estensione).
+
+    Gestisce anche il caso dei file duplicati nella stessa cartella (stesso
+    nome caricato due volte): Google Takeout rinomina il media in
+    "base(1).ext", "base(2).ext", ecc., ma il JSON del duplicato non prende
+    il "(n)" subito dopo il nome come ci si aspetterebbe, bensì alla fine,
+    dopo il suffisso "supplemental-metadata" (es. media "salone(1).jpg" ->
+    json "salone.jpg.supplemental-metadata(1).json"). Va applicata anche al
+    nome "originale" ricostruito da una foto "-modificata(1)", perché quel
+    duplicato ha comunque un proprio JSON con lo stesso schema.
+    """
+    candidates = [name + ".json", name + ".supplemental-metadata.json"]
+    m = re.match(r"^(.*)(\(\d+\))(\.[^.]+)$", name)
+    if m:
+        base, num, ext = m.groups()
+        candidates.append(f"{base}{ext}.supplemental-metadata{num}.json")
+        candidates.append(f"{base}{ext}{num}.json")
+        candidates.append(f"{base}{ext}{num}.supplemental-metadata.json")
+        # Per foto senza un nome "da fotocamera" (importate, incollate, o
+        # rinominate nell'interfaccia di Google Foto: es. "Parco Nord.jpg")
+        # il JSON a volte perde del tutto l'estensione originale, pur
+        # mantenendo il contatore del duplicato: "Parco Nord(1).jpg" ->
+        # "Parco Nord.supplemental-metadata(1).json" (non "Parco
+        # Nord.jpg.supplemental-metadata(1).json").
+        candidates.append(f"{base}.supplemental-metadata{num}.json")
+    else:
+        base, ext = os.path.splitext(name)
+        if ext:
+            # Stesso fenomeno del caso sopra, ma senza contatore duplicato:
+            # "download.jpg" -> "download.supplemental-metadata.json".
+            candidates.append(f"{base}.supplemental-metadata.json")
+    return candidates
+
+
+def find_json_for_media(media_path: Path, dir_json_cache: dict, dir_sibling_cache: dict | None = None,
+                         dir_name_index: dict | None = None):
     media_name = media_path.name
     media_stem = media_path.stem
     media_suffix = media_path.suffix
     dir_path = media_path.parent
 
-    candidates = [
-        media_name + ".json",
-        media_name + ".supplemental-metadata.json",
-    ]
+    candidates = _json_candidates_for_name(media_name)
 
     # Google Takeout aggiunge un suffisso alle foto modificate nell'app Google
     # Foto, nella lingua dell'account: qui i casi noti. Il JSON associato resta
@@ -121,25 +158,27 @@ def find_json_for_media(media_path: Path, dir_json_cache: dict):
         if em:
             original_stem = em.group(1) + (em.group(2) or "")
             original_name = original_stem + media_suffix
-            candidates.append(original_name + ".json")
-            candidates.append(original_name + ".supplemental-metadata.json")
+            candidates += _json_candidates_for_name(original_name)
 
-    # File duplicati nella stessa cartella (stesso nome caricato due volte):
-    # Google Takeout rinomina il media in "base(1).ext", "base(2).ext", ecc.
-    # Il JSON del duplicato non prende il "(n)" subito dopo il nome come ci
-    # si aspetterebbe, ma alla fine, dopo il suffisso "supplemental-metadata"
-    # (es. media "salone(1).jpg" -> json "salone.jpg.supplemental-metadata(1).json").
-    m = re.match(r"^(.*)(\(\d+\))(\.[^.]+)$", media_name)
-    if m:
-        base, num, ext = m.groups()
-        candidates.append(f"{base}{ext}.supplemental-metadata{num}.json")
-        candidates.append(f"{base}{ext}{num}.json")
-        candidates.append(f"{base}{ext}{num}.supplemental-metadata.json")
+    # Un export grande viene diviso da Google in più cartelle "Takeout N"
+    # separate, ognuna con la propria copia di un identico nome di album
+    # (es. "Foto da 2018" in Takeout, Takeout 2, Takeout 3...): le foto di
+    # un album finiscono sparse tra queste copie, e il JSON di una foto può
+    # trovarsi in una copia diversa da quella della foto stessa. Se il JSON
+    # non è nella cartella del file, lo cerchiamo quindi (con lo stesso
+    # matching esatto, non fuzzy) anche in tutte le altre cartelle
+    # dell'export che hanno lo stesso nome della cartella madre diretta.
+    search_dirs = [dir_path]
+    if dir_name_index is not None:
+        for other_dir in dir_name_index.get(dir_path.name, ()):
+            if other_dir != dir_path:
+                search_dirs.append(other_dir)
 
-    for candidate in candidates:
-        p = dir_path / candidate
-        if p.exists():
-            return p
+    for search_dir in search_dirs:
+        for candidate in candidates:
+            p = search_dir / candidate
+            if p.exists():
+                return p
 
     if dir_path not in dir_json_cache:
         dir_json_cache[dir_path] = [
@@ -173,6 +212,40 @@ def find_json_for_media(media_path: Path, dir_json_cache: dict):
     if best_match is not None:
         dir_jsons.remove(best_match)
         return best_match
+
+    # "Motion Photo" di Google Pixel (e Live Photo simili): un video
+    # "MVIMG_xxx.mp4" affiancato da una foto sorella "MVIMG_xxx.jpg" (stesso
+    # nome, estensione diversa) non ha un proprio JSON: i metadati (data,
+    # GPS) sono solo su quello della foto, che va riusato anche per il
+    # video. La foto sorella può trovarsi in una qualunque delle cartelle
+    # omonime (search_dirs) così come il video, ma il suo JSON può essere
+    # finito in una cartella omonima ANCORA DIVERSA da quella della foto
+    # stessa (stesso motivo per cui un video può essere separato dal proprio
+    # JSON): la ricerca del JSON va quindi ripetuta su tutte le search_dirs,
+    # non solo su quella in cui si è trovata la foto sorella. Non tocca
+    # dir_json_cache: la foto sorella userà comunque lo stesso JSON tramite
+    # il match esatto quando verrà elaborata a sua volta.
+    if dir_sibling_cache is not None and media_suffix.lower() in MOTION_PHOTO_VIDEO_EXTENSIONS:
+        sibling_photo = None
+        for search_dir in search_dirs:
+            if search_dir not in dir_sibling_cache:
+                dir_sibling_cache[search_dir] = [
+                    p for p in search_dir.iterdir()
+                    if p.is_file() and p.suffix.lower() != ".json" and not p.name.startswith("._")
+                ]
+            for sibling in dir_sibling_cache[search_dir]:
+                if sibling.suffix.lower() in MOTION_PHOTO_IMAGE_EXTENSIONS and sibling.stem.lower() == media_stem.lower():
+                    sibling_photo = sibling
+                    break
+            if sibling_photo is not None:
+                break
+
+        if sibling_photo is not None:
+            for search_dir in search_dirs:
+                for json_suffix in JSON_SUFFIXES:
+                    jp = search_dir / (sibling_photo.name + json_suffix)
+                    if jp.exists():
+                        return jp
 
     return None
 
@@ -352,6 +425,18 @@ def unique_path(path: Path) -> Path:
         i += 1
 
 
+def build_dir_name_index(input_root: Path) -> dict:
+    """Indicizza tutte le sottocartelle di input_root per nome, in modo da
+    poter cercare un JSON anche in cartelle omonime diverse da quella del
+    file media (es. lo stesso album "Foto da 2018" ripetuto in più parti
+    "Takeout N" di un export diviso da Google)."""
+    index = {}
+    for p in input_root.rglob("*"):
+        if p.is_dir():
+            index.setdefault(p.name, []).append(p)
+    return index
+
+
 def collect_media_files(input_root: Path) -> list:
     files = []
     for p in input_root.rglob("*"):
@@ -462,9 +547,11 @@ class Job:
             media_files = collect_media_files(self.input_root)
             self.total = len(media_files)
             self.log(self.t("found_files", n=self.total))
+            dir_name_index = build_dir_name_index(self.input_root)
 
             self.state = "running"
             dir_json_cache = {}
+            dir_sibling_cache = {}
             cache_lock = threading.Lock()
             error_log_lock = threading.Lock()
             match_log_lock = threading.Lock()
@@ -474,7 +561,7 @@ class Job:
             def process_one(media_path: Path):
                 try:
                     with cache_lock:
-                        json_path = find_json_for_media(media_path, dir_json_cache)
+                        json_path = find_json_for_media(media_path, dir_json_cache, dir_sibling_cache, dir_name_index)
 
                     meta = {
                         "timestamp": None, "latitude": None, "longitude": None,

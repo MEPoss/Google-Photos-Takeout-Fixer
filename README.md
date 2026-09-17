@@ -54,9 +54,14 @@ Google Takeout ed estrarle:
    giorni per librerie grandi
 
 > [!NOTE]
-> Se il tuo export supera i 50GB e viene diviso in più archivi, estraili
-> tutti e unisci il contenuto in un'**unica cartella** prima di usare
-> Google Photos Takeout Fixer.
+> Se il tuo export supera i 50GB, Google lo divide in più archivi separati
+> (`Takeout`, `Takeout 2`, `Takeout 3`, ...). **Non serve unirli a mano**:
+> estraili tutti dentro un'unica cartella (anche solo come sottocartelle
+> una accanto all'altra) e punta Google Photos Takeout Fixer direttamente
+> lì. Il programma cerca automaticamente i metadati anche tra le copie
+> omonime di uno stesso album sparse tra i vari archivi, nel caso in cui
+> Google abbia separato una foto dal proprio file JSON durante la
+> divisione.
 
 ### 2. Installazione
 
