@@ -426,21 +426,25 @@ def unique_path(path: Path) -> Path:
         i += 1
 
 
-def build_dir_name_index(input_root: Path) -> dict:
+def build_dir_name_index(input_root: Path, should_stop=None) -> dict:
     """Indicizza tutte le sottocartelle di input_root per nome, in modo da
     poter cercare un JSON anche in cartelle omonime diverse da quella del
     file media (es. lo stesso album "Foto da 2018" ripetuto in più parti
     "Takeout N" di un export diviso da Google)."""
     index = {}
     for p in input_root.rglob("*"):
+        if should_stop is not None and should_stop():
+            break
         if p.is_dir():
             index.setdefault(p.name, []).append(p)
     return index
 
 
-def collect_media_files(input_root: Path) -> list:
+def collect_media_files(input_root: Path, should_stop=None) -> list:
     files = []
     for p in input_root.rglob("*"):
+        if should_stop is not None and should_stop():
+            break
         # File "._Nome.jpg": sidecar AppleDouble che macOS crea per salvare
         # metadati Finder su filesystem che non li supportano (es. dischi
         # esterni exFAT/NTFS). Non sono foto reali: vanno ignorati, altrimenti
@@ -461,7 +465,7 @@ def _file_hash(path: Path) -> str:
     return h.hexdigest()
 
 
-def dedupe_identical_files(media_files: list) -> tuple:
+def dedupe_identical_files(media_files: list, should_stop=None) -> tuple:
     """Una stessa foto/video che appartiene a più album di Google Foto viene
     esportata da Google Takeout una volta per ogni album: stesso nome, stesso
     contenuto, in cartelle diverse. Qui li individuiamo e ne teniamo solo
@@ -490,18 +494,35 @@ def dedupe_identical_files(media_files: list) -> tuple:
     duplicates = []
 
     for group in by_name_size.values():
+        # Interruzione cooperativa: questo è il passaggio più lento (lettura
+        # completa del contenuto per il confronto), quindi il più importante
+        # da poter fermare subito. I gruppi non ancora esaminati vengono
+        # semplicemente tenuti così com'è (non deduplicati, ma nessun file
+        # perso) invece di continuare a leggerne il contenuto.
+        if should_stop is not None and should_stop():
+            kept.extend(group)
+            continue
+
         if len(group) == 1:
             kept.append(group[0])
             continue
 
         by_hash = {}
+        stopped_mid_group = False
         for p in group:
+            if should_stop is not None and should_stop():
+                stopped_mid_group = True
+                break
             try:
                 digest = _file_hash(p)
             except OSError:
                 # Illeggibile: non rischiamo di scartarlo, lo teniamo com'è.
                 digest = f"__unreadable__{id(p)}"
             by_hash.setdefault(digest, []).append(p)
+
+        if stopped_mid_group:
+            kept.extend(group)
+            continue
 
         for hash_group in by_hash.values():
             hash_group.sort(key=str)
@@ -648,9 +669,11 @@ class Job:
             with open(duplicates_log_path, "w", encoding="utf-8", newline="") as df:
                 csv.writer(df).writerow(DUPLICATES_LOG_COLUMNS)
 
+            should_stop = lambda: self.cancelled
+
             self.state = "scanning"
             self.log(self.t("scanning", path=self.input_root))
-            media_files = collect_media_files(self.input_root)
+            media_files = collect_media_files(self.input_root, should_stop=should_stop)
             self.total_raw = len(media_files)
             self.log(self.t("found_files", n=len(media_files)))
 
@@ -660,7 +683,11 @@ class Job:
             # poi confermate byte-per-byte con SHA-256) e ne teniamo una sola
             # copia, altrimenti finirebbero in output come "foto.jpg",
             # "foto_1.jpg", "foto_2.jpg" pur essendo la stessa identica foto.
-            media_files, duplicate_pairs = dedupe_identical_files(media_files)
+            # È il passaggio più lento (legge il contenuto dei file), quindi
+            # anche il più importante da rendere interrompibile: se l'utente
+            # annulla mentre è in corso, i gruppi non ancora esaminati
+            # vengono lasciati così com'è invece di continuare a leggerli.
+            media_files, duplicate_pairs = dedupe_identical_files(media_files, should_stop=should_stop)
             self.duplicates_skipped = len(duplicate_pairs)
             if duplicate_pairs:
                 self.log(self.t("found_duplicates", n=self.duplicates_skipped))
@@ -672,22 +699,24 @@ class Job:
 
             self.total = len(media_files)
 
-            if not self.dry_run:
-                needed = 0
-                for mf in media_files:
-                    try:
-                        needed += mf.stat().st_size
-                    except OSError:
-                        pass
-                available = shutil.disk_usage(self.output_root).free
-                if available < needed:
-                    raise RuntimeError(self.t(
-                        "insufficient_space",
-                        needed=_format_size(needed),
-                        available=_format_size(available),
-                    ))
+            dir_name_index = {}
+            if not self.cancelled:
+                if not self.dry_run:
+                    needed = 0
+                    for mf in media_files:
+                        try:
+                            needed += mf.stat().st_size
+                        except OSError:
+                            pass
+                    available = shutil.disk_usage(self.output_root).free
+                    if available < needed:
+                        raise RuntimeError(self.t(
+                            "insufficient_space",
+                            needed=_format_size(needed),
+                            available=_format_size(available),
+                        ))
 
-            dir_name_index = build_dir_name_index(self.input_root)
+                dir_name_index = build_dir_name_index(self.input_root, should_stop=should_stop)
 
             self.state = "running"
             dir_json_cache = {}
@@ -777,10 +806,11 @@ class Job:
                             ef.write(f"EXCEPTION\t{media_path}\t{exc}\n")
                     self.log(self.t("exception", name=media_path.name, exc=exc))
 
-            with ThreadPoolExecutor(max_workers=self.jobs) as executor:
-                futures = [executor.submit(process_one, mf) for mf in media_files]
-                for _ in as_completed(futures):
-                    pass
+            if not self.cancelled:
+                with ThreadPoolExecutor(max_workers=self.jobs) as executor:
+                    futures = [executor.submit(process_one, mf) for mf in media_files]
+                    for _ in as_completed(futures):
+                        pass
 
             if self.cancelled:
                 self.log(self.t("cancelled"))
