@@ -465,7 +465,7 @@ def _file_hash(path: Path) -> str:
     return h.hexdigest()
 
 
-def dedupe_identical_files(media_files: list, should_stop=None) -> tuple:
+def dedupe_identical_files(media_files: list, should_stop=None, progress=None) -> tuple:
     """Una stessa foto/video che appartiene a più album di Google Foto viene
     esportata da Google Takeout una volta per ogni album: stesso nome, stesso
     contenuto, in cartelle diverse. Qui li individuiamo e ne teniamo solo
@@ -481,6 +481,11 @@ def dedupe_identical_files(media_files: list, should_stop=None) -> tuple:
 
     Ritorna (file_da_elaborare, coppie_scartate) dove coppie_scartate è una
     lista di (file_tenuto, file_scartato) per il report di trasparenza.
+
+    `progress`, se passato, viene richiamato periodicamente come
+    progress(controllati, totale_candidati): è il passaggio più lento (legge
+    per intero ogni file candidato) e senza un riscontro visibile può durare
+    a lungo su dischi esterni lenti, risultando indistinguibile da un blocco.
     """
     by_name_size = {}
     for p in media_files:
@@ -489,6 +494,12 @@ def dedupe_identical_files(media_files: list, should_stop=None) -> tuple:
         except OSError:
             size = None
         by_name_size.setdefault((p.name.lower(), size), []).append(p)
+
+    total_candidates = sum(len(g) for g in by_name_size.values() if len(g) > 1)
+    checked = 0
+    PROGRESS_EVERY = 50
+    if progress is not None:
+        progress(0, total_candidates)
 
     kept = []
     duplicates = []
@@ -519,6 +530,9 @@ def dedupe_identical_files(media_files: list, should_stop=None) -> tuple:
                 # Illeggibile: non rischiamo di scartarlo, lo teniamo com'è.
                 digest = f"__unreadable__{id(p)}"
             by_hash.setdefault(digest, []).append(p)
+            checked += 1
+            if progress is not None and checked % PROGRESS_EVERY == 0:
+                progress(checked, total_candidates)
 
         if stopped_mid_group:
             kept.extend(group)
@@ -529,6 +543,9 @@ def dedupe_identical_files(media_files: list, should_stop=None) -> tuple:
             kept.append(hash_group[0])
             for extra in hash_group[1:]:
                 duplicates.append((hash_group[0], extra))
+
+    if progress is not None:
+        progress(checked, total_candidates)
 
     return kept, duplicates
 
@@ -612,6 +629,8 @@ class Job:
         self.missing_metadata = 0
         self.errors = 0
         self.duplicates_skipped = 0
+        self.dedup_checked = 0
+        self.dedup_total_candidates = 0
         self.log_lines = []
         self.error_message = None
         self.cancelled = False
@@ -637,6 +656,8 @@ class Job:
                 "missing_metadata": self.missing_metadata,
                 "errors": self.errors,
                 "duplicates_skipped": self.duplicates_skipped,
+                "dedup_checked": self.dedup_checked,
+                "dedup_total_candidates": self.dedup_total_candidates,
                 "error_message": self.error_message,
                 "log_tail": self.log_lines[-200:],
             }
@@ -687,7 +708,13 @@ class Job:
             # anche il più importante da rendere interrompibile: se l'utente
             # annulla mentre è in corso, i gruppi non ancora esaminati
             # vengono lasciati così com'è invece di continuare a leggerli.
-            media_files, duplicate_pairs = dedupe_identical_files(media_files, should_stop=should_stop)
+            def _dedup_progress(checked, total):
+                self.dedup_checked = checked
+                self.dedup_total_candidates = total
+
+            media_files, duplicate_pairs = dedupe_identical_files(
+                media_files, should_stop=should_stop, progress=_dedup_progress,
+            )
             self.duplicates_skipped = len(duplicate_pairs)
             if duplicate_pairs:
                 self.log(self.t("found_duplicates", n=self.duplicates_skipped))

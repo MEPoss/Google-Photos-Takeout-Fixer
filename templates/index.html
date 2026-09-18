@@ -513,6 +513,7 @@
     </div>
     <div class="progress-outer"><div class="progress-inner" id="progressBar"></div></div>
 
+    <div class="field-hint" id="dedupProgress" style="display:none; margin-bottom:6px"></div>
     <div class="field-hint" data-i18n="statsScopeHint" style="margin-bottom:6px"></div>
     <div class="stats">
       <div class="stat"><div class="num" id="statTotalRaw">0</div><div class="lbl" data-i18n="statTotalRaw"></div></div>
@@ -548,6 +549,7 @@ const I18N = {
     start: "Avvia elaborazione",
     starting: "Elaborazione in corso…",
     statsScopeHint: "I file trovati includono i duplicati (stessa foto in più album); quelli da elaborare sono al netto dei duplicati, già esclusi in partenza.",
+    dedupProgress: "Verifica duplicati in corso: {done}/{total} file candidati controllati — passaggio lento su disco esterno, l'app non è bloccata.",
     statTotalRaw: "File trovati",
     statTotal: "Da elaborare",
     statProcessed: "Processati",
@@ -586,6 +588,7 @@ const I18N = {
     start: "Start processing",
     starting: "Processing…",
     statsScopeHint: "Files found include duplicates (same photo in multiple albums); files to process already exclude them.",
+    dedupProgress: "Checking for duplicates: {done}/{total} candidate files checked so far — this is a slow step on external drives, the app is not frozen.",
     statTotalRaw: "Files found",
     statTotal: "To process",
     statProcessed: "Processed",
@@ -741,7 +744,22 @@ function pollStatus(jobId) {
       document.getElementById('statErrors').textContent = data.errors;
       document.getElementById('statDuplicates').textContent = data.duplicates_skipped;
 
-      const pct = data.total > 0 ? Math.round((data.processed / data.total) * 100) : 0;
+      const dedupEl = document.getElementById('dedupProgress');
+      if (data.state === 'scanning' && data.dedup_total_candidates > 0) {
+        dedupEl.textContent = T.dedupProgress
+          .replace('{done}', data.dedup_checked)
+          .replace('{total}', data.dedup_total_candidates);
+        dedupEl.style.display = 'block';
+      } else {
+        dedupEl.style.display = 'none';
+      }
+
+      let pct;
+      if (data.state === 'scanning' && data.dedup_total_candidates > 0) {
+        pct = Math.round((data.dedup_checked / data.dedup_total_candidates) * 100);
+      } else {
+        pct = data.total > 0 ? Math.round((data.processed / data.total) * 100) : 0;
+      }
       document.getElementById('progressBar').style.width = pct + '%';
 
       const logEl = document.getElementById('log');
