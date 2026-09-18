@@ -585,6 +585,7 @@ class Job:
         self.fallback_tz = fallback_tz
 
         self.state = "pending"  # pending -> scanning -> running -> done/error/cancelled
+        self.total_raw = 0
         self.total = 0
         self.processed = 0
         self.missing_metadata = 0
@@ -609,6 +610,7 @@ class Job:
         with self._lock:
             return {
                 "state": self.state,
+                "total_raw": self.total_raw,
                 "total": self.total,
                 "processed": self.processed,
                 "missing_metadata": self.missing_metadata,
@@ -649,6 +651,7 @@ class Job:
             self.state = "scanning"
             self.log(self.t("scanning", path=self.input_root))
             media_files = collect_media_files(self.input_root)
+            self.total_raw = len(media_files)
             self.log(self.t("found_files", n=len(media_files)))
 
             # Una stessa foto/video che appartiene a più album di Google Foto

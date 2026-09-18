@@ -384,7 +384,7 @@
 
   .stats {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 8px;
     margin-top: 14px;
   }
@@ -513,12 +513,14 @@
     </div>
     <div class="progress-outer"><div class="progress-inner" id="progressBar"></div></div>
 
+    <div class="field-hint" data-i18n="statsScopeHint" style="margin-bottom:6px"></div>
     <div class="stats">
+      <div class="stat"><div class="num" id="statTotalRaw">0</div><div class="lbl" data-i18n="statTotalRaw"></div></div>
+      <div class="stat duplicates"><div class="num" id="statDuplicates">0</div><div class="lbl" data-i18n="statDuplicates"></div></div>
       <div class="stat"><div class="num" id="statTotal">0</div><div class="lbl" data-i18n="statTotal"></div></div>
       <div class="stat done"><div class="num" id="statProcessed">0</div><div class="lbl" data-i18n="statProcessed"></div></div>
       <div class="stat missing"><div class="num" id="statMissing">0</div><div class="lbl" data-i18n="statMissing"></div></div>
       <div class="stat errors"><div class="num" id="statErrors">0</div><div class="lbl" data-i18n="statErrors"></div></div>
-      <div class="stat duplicates"><div class="num" id="statDuplicates">0</div><div class="lbl" data-i18n="statDuplicates"></div></div>
     </div>
 
     <div id="log"></div>
@@ -545,7 +547,9 @@ const I18N = {
     dryRun: "Dry run — simula senza copiare o modificare nulla",
     start: "Avvia elaborazione",
     starting: "Elaborazione in corso…",
-    statTotal: "Totali",
+    statsScopeHint: "I file trovati includono i duplicati (stessa foto in più album); quelli da elaborare sono al netto dei duplicati, già esclusi in partenza.",
+    statTotalRaw: "File trovati",
+    statTotal: "Da elaborare",
     statProcessed: "Processati",
     statMissing: "Senza JSON",
     statErrors: "Errori",
@@ -581,7 +585,9 @@ const I18N = {
     dryRun: "Dry run — simulate without copying or modifying anything",
     start: "Start processing",
     starting: "Processing…",
-    statTotal: "Total",
+    statsScopeHint: "Files found include duplicates (same photo in multiple albums); files to process already exclude them.",
+    statTotalRaw: "Files found",
+    statTotal: "To process",
     statProcessed: "Processed",
     statMissing: "Missing JSON",
     statErrors: "Errors",
@@ -728,6 +734,7 @@ function pollStatus(jobId) {
       badge.className = 'status-badge ' + data.state;
       badge.textContent = T.statusLabels[data.state] || data.state;
 
+      document.getElementById('statTotalRaw').textContent = data.total_raw;
       document.getElementById('statTotal').textContent = data.total;
       document.getElementById('statProcessed').textContent = data.processed;
       document.getElementById('statMissing').textContent = data.missing_metadata;
