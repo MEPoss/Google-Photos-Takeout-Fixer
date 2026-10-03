@@ -258,6 +258,7 @@ def parse_json_metadata(json_path: Path) -> dict:
     result = {
         "timestamp": None, "latitude": None, "longitude": None,
         "altitude": None, "description": None, "title": None,
+        "people": [],
     }
 
     photo_taken = data.get("photoTakenTime") or data.get("creationTime")
@@ -279,6 +280,13 @@ def parse_json_metadata(json_path: Path) -> dict:
 
     result["description"] = data.get("description") or None
     result["title"] = data.get("title") or None
+
+    people = []
+    for p in data.get("people") or []:
+        name = (p.get("name") or "").strip() if isinstance(p, dict) else ""
+        if name and name not in people:
+            people.append(name)
+    result["people"] = people
     return result
 
 
@@ -333,6 +341,14 @@ def build_exiftool_args(meta: dict, fallback_tz: str = "UTC") -> list:
         ]
         if meta["title"]:
             args += [f"-Title={meta['title']}"]
+
+    # Persone taggate in Google Foto: XMP PersonInImage (standard IPTC) e
+    # Subject, che Lightroom, Apple Foto ecc. leggono come parole chiave.
+    people = meta.get("people") or []
+    if people:
+        args += ["-XMP-iptcExt:PersonInImage=", "-XMP-dc:Subject="]
+        for name in people:
+            args += [f"-XMP-iptcExt:PersonInImage+={name}", f"-XMP-dc:Subject+={name}"]
 
     return args
 
