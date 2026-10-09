@@ -420,6 +420,37 @@ def run_exiftool(target: Path, exif_args: list):
     return False, stderr
 
 
+def read_embedded_timestamp(path: Path) -> int | None:
+    """Data di scatto già scritta nel file (EXIF/QuickTime), per le foto senza
+    JSON. Serve solo a scegliere la cartella anno/mese e la data del file:
+    il file non viene riscritto. Niente date inventate: se non c'è una data
+    plausibile, restituisce None (e si ricade sulla data di modifica)."""
+    exiftool_bin = resolve_exiftool()
+    if exiftool_bin is None:
+        return None
+    try:
+        proc = subprocess.run(
+            [exiftool_bin, "-m", "-s3", "-d", "%Y:%m:%d %H:%M:%S",
+             "-DateTimeOriginal", "-CreateDate", "-MediaCreateDate", "-TrackCreateDate",
+             str(path)],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for line in proc.stdout.splitlines():
+        m = re.match(r"(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2}):(\d{2})", line.strip())
+        if not m:
+            continue
+        y, mo, d, h, mi, se = (int(x) for x in m.groups())
+        if y < 1990 or y > datetime.now().year + 1 or not (1 <= mo <= 12 and 1 <= d <= 31):
+            continue
+        try:
+            return int(datetime(y, mo, d, h, mi, se, tzinfo=timezone.utc).timestamp())
+        except ValueError:
+            continue
+    return None
+
+
 def output_path_for(base_output: Path, timestamp, filename: str) -> Path:
     if timestamp is not None:
         dt = datetime.fromtimestamp(timestamp, tz=timezone.utc)
@@ -799,8 +830,10 @@ class Job:
                         self.log(self.t("no_json", name=media_path.name))
 
                     dest_dir_time = meta["timestamp"]
+                    embedded_ts = None
                     if dest_dir_time is None:
-                        dest_dir_time = int(media_path.stat().st_mtime)
+                        embedded_ts = read_embedded_timestamp(media_path)
+                        dest_dir_time = embedded_ts if embedded_ts is not None else int(media_path.stat().st_mtime)
 
                     dest_path = output_path_for(self.output_root, dest_dir_time, media_path.name)
 
@@ -837,6 +870,10 @@ class Job:
                             if meta["timestamp"] is not None:
                                 ts = meta["timestamp"]
                                 os.utime(dest_path, (ts, ts))
+
+                        if not has_metadata or meta["timestamp"] is None:
+                            if embedded_ts is not None:
+                                os.utime(dest_path, (embedded_ts, embedded_ts))
 
                     with self._lock:
                         self.processed += 1
